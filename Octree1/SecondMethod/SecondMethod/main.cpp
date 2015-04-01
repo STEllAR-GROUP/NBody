@@ -90,10 +90,9 @@ template<class type> class octree {
 public:
     octree() {};
     void root(vector<vector<type>> &init_value, vector<vector<type>> &Center_MM, vector<vector<type>> &members1, type ii);
-    void strc(vector<vector<type>> &init_value,vector<vector<type>> &boundary_subcube,vector<vector<type>> &Center_MM, vector<vector<type>> &members1,vector<vector<type>> &members2, vector<type> &cells_arange, int ii,int p);
-    void cell_list(vector<vector<type>> &init_value, vector<vector<type>> &Center_MM,vector<vector<type>> &members1,vector<vector<type>> &members2,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,int N);
-    void traverse_tree(vector<vector<type>> init_value,vector<vector<type>> &members1,vector<vector<type>> &members2,vector<vector<type>> Center_MM,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,int node, int root, int root2);
-    float compute_force(vector<vector<type>> &init_value,vector<vector<type>> &Center_MM, vector<vector<type>>&list_cell1,vector<vector<type>>&list_cell2,type parent, int node, float force);
+    void strc(vector<vector<type>> &init_value,vector<vector<type>> &boundary_subcube,vector<vector<type>> &Center_MM, vector<vector<type>> &members1,vector<vector<type>> &members2, vector<type> &cells_arange,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2, int ii,int p);
+    void traverse_tree(vector<vector<type>> init_value,vector<vector<type>> Center_MM,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,vector<vector<type>> &list_node1,vector<vector<type>> &list_node2,int root, int node);
+    float compute_force(vector<vector<type>> &init_value,vector<vector<type>> &Center_MM, vector<vector<type>>&list_cell1,vector<vector<type>>&list_cell2, int node, float force);
 };
 
 //Computing center of mass for each subcube
@@ -109,7 +108,7 @@ template <class type> void octree<type>::root(vector<vector<type>> &init_value, 
 }
 
 //Travesing tree and dividing it if there is more that one node in the subcube
-template <class type> void octree<type>::strc(vector<vector<type>> &init_value,vector<vector<type>> &boundary_subcube,vector<vector<type>> &Center_MM, vector<vector<type>> &members1,vector<vector<type>> &members2,vector<type> &cells_arange, int ii , int p){
+template <class type> void octree<type>::strc(vector<vector<type>> &init_value,vector<vector<type>> &boundary_subcube,vector<vector<type>> &Center_MM, vector<vector<type>> &members1,vector<vector<type>> &members2,vector<type> &cells_arange,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2, int ii , int p){
     octree<float> tree;
     vector <float> J;
     int i,j,k; long temp;
@@ -131,12 +130,12 @@ template <class type> void octree<type>::strc(vector<vector<type>> &init_value,v
         for(i=1;i<9; ++i){
             if(!members1[i+p].empty()){
                 if(Center_MM[p+i][8]>=2){
-                    members2.at(ii).push_back(i+p); Center_MM[i+p][9]=ii; cells_arange.push_back(p+i);
+                    members2.at(ii).push_back(i+p); Center_MM[i+p][9]=ii; cells_arange.push_back(p+i); list_cell2.at(ii).push_back(i+p);
                     for(j=1; j<9; ++j){
-                        members1.push_back(J); members2.push_back(J);
-                        Center_MM.push_back(J);boundary_subcube.push_back(J);}}
-                else if(Center_MM[p+i][8]==1)
-                    Center_MM[i+p][9]=ii; init_value[members1[i+p][0]][10]=1;}}
+                        members1.push_back(J); members2.push_back(J); list_cell1.push_back(J);list_cell2.push_back(J); Center_MM.push_back(J);boundary_subcube.push_back(J);}}
+                else if(Center_MM[p+i][8]==1){
+                    Center_MM[i+p][9]=ii; list_cell1.at(ii).push_back(i+p);}
+                init_value[members1[i+p][0]][10]=1; }}
         if(members2[ii].size()>=1){
             for(j=0; j<members2[ii].size(); ++j){
                 tree.root(init_value,Center_MM,members1,members2[ii][j]);
@@ -146,53 +145,39 @@ template <class type> void octree<type>::strc(vector<vector<type>> &init_value,v
                     if(cells_arange[i]==members2[ii][j])
                         p=8*i;
                 det_boundary_subcube(boundary_subcube,members2[ii][j],p);
-                tree.strc(init_value,boundary_subcube,Center_MM, members1,members2,cells_arange,members2[ii][j],p);}}}
+                tree.strc(init_value,boundary_subcube,Center_MM, members1,members2,cells_arange,list_cell1,list_cell2 ,members2[ii][j],p);}}}
 }
 
 //Traversing the tree
-template <class type> void octree<type>::traverse_tree(vector<vector<type>> init_value,vector<vector<type>> &members1,vector<vector<type>> &members2,vector<vector<type>> Center_MM,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,int root, int node, int root2){
+template <class type> void octree<type>::traverse_tree(vector<vector<type>> init_value,vector<vector<type>> Center_MM,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,vector<vector<type>> &list_node1,vector<vector<type>> &list_node2,int root, int node){
     int i,theta=5; ///////Get from input params
-    float D=sqrt(pow((init_value[node][2]-Center_MM[root2][2]),2.0)+pow((init_value[node][3]-Center_MM[root2][3]),2.0)+pow((init_value[node][4]-Center_MM[root2][4]),2.0));
-    float r=sqrt(pow(Center_MM[root2][5],2.0)+pow(Center_MM[root2][6],2.0)+pow(Center_MM[root2][7],2.0));
+    float D=sqrt(pow((init_value[node][2]-Center_MM[root][2]),2.0)+pow((init_value[node][3]-Center_MM[root][3]),2.0)+pow((init_value[node][4]-Center_MM[root][4]),2.0));
+    float r=sqrt(pow(Center_MM[root][5],2.0)+pow(Center_MM[root][6],2.0)+pow(Center_MM[root][7],2.0));
     if (D<(r/theta)){
-        if (members1[root2].size()!=0)
-            for(i=0; i<members1[root2].size(); ++i)
-                if(init_value[members1[root2][i]][8]==root2)
-                    list_cell1.at(root).push_back(members1[root2][i]);
-        if(members2[root2].size()!=0)
-            for(i=0; i<members2[root2].size(); ++i)
-                traverse_tree(init_value,members1,members2,Center_MM,list_cell1,list_cell2,root,node,members2[root2][i]);}
+        if (list_cell1[root].size()!=0)
+            for(i=0; i<list_cell1[root].size(); ++i)
+                    list_node1.at(node).push_back(list_cell1[root][i]);
+        if(list_cell2[root].size()!=0)
+            for(i=0; i<list_cell2[root].size(); ++i)
+                traverse_tree(init_value,Center_MM,list_cell1,list_cell2,list_node1,list_node2,list_cell2[root][i],node);}
     else
-        list_cell2.at(root).push_back(Center_MM[root2][0]);
-}
-
-//Interaction list for each cell
-template <class type> void octree<type>::cell_list(vector<vector<type>> &init_value, vector<vector<type>> &Center_MM,vector<vector<type>> &members1,vector<vector<type>> &members2,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,int N){
-    int i,j,k; vector <type> J;
-    for(i=0; i<Center_MM.size(); ++i){
-        list_cell1.push_back(J); list_cell2.push_back(J); k=-1;
-        if (!members1[i].empty() && Center_MM[i][8]!=0){
-            for (j=0; j<Center_MM[i][8];++j)
-                if(init_value[members1[i][j]][8]==i)
-                    k=members1[i][j];
-            if (k!=-1)
-                traverse_tree(init_value,members1,members2,Center_MM,list_cell1,list_cell2,i,k,0);}}
+        list_node2.at(node).push_back(Center_MM[root][0]);
 }
 
 //Computing force
-template <class type> float octree<type>::compute_force(vector<vector<type>> &init_value,vector<vector<type>> &Center_MM,vector<vector<type>> &list_cell1,vector<vector<type>> &list_cell2,type parent,int node, float force){
+template <class type> float octree<type>::compute_force(vector<vector<type>> &init_value,vector<vector<type>> &Center_MM,vector<vector<type>> &list_node1,vector<vector<type>> &list_node2,int node, float force){
     float G=6.673*pow(10.0,-11.0); //////Get it from input
-    if(list_cell1[parent].size()!=0)
-        for (int i=0; i<list_cell1[parent].size(); ++i)
-            force=force+ G* init_value[list_cell1[parent][i]][1]*init_value[node][1]/(1+(pow((init_value[list_cell1[parent][i]][2]-init_value[node][2]),2.0)+pow((init_value[list_cell1[parent][i]][3]-init_value[node][3]),2.0)+pow((init_value[list_cell1[parent][i]][4]-init_value[node][4]),2.0)));
-    if(list_cell2[parent].size()!=0)
-        for (int j=0; j<list_cell2[parent].size(); ++j)
-            force=force+ G*Center_MM[list_cell2[parent][j]][0]*init_value[node][0]/(pow((Center_MM[list_cell2 [parent][j]][1]-init_value[node][2]),2.0)+pow((Center_MM[list_cell2[parent][j]][2]-init_value[node][3]),2.0)+pow((Center_MM[list_cell2[parent][j]][3]-init_value[node][4]),2.0));
+    if(list_node1[node].size()!=0)
+        for (int i=0; i<list_node1[node].size(); ++i)
+            force=force+ G* init_value[list_node1[node][i]][1]*init_value[node][1]/(1+(pow((init_value[list_node1[node][i]][2]-init_value[node][2]),2.0)+pow((init_value[list_node1[node][i]][3]-init_value[node][3]),2.0)+pow((init_value[list_node1[node][i]][4]-init_value[node][4]),2.0)));
+    if(list_node2[node].size()!=0)
+        for (int j=0; j<list_node2[node].size(); ++j)
+            force=force+ G*Center_MM[list_node2[node][j]][0]*init_value[node][0]/(pow((Center_MM[list_node2[node][j]][1]-init_value[node][2]),2.0)+pow((Center_MM[list_node2[node][j]][2]-init_value[node][3]),2.0)+pow((Center_MM[list_node2[node][j]][3]-init_value[node][4]),2.0));
     return force;
 }
 
 int main(int argc, const char * argv[]){
-    boost::timer::cpu_timer timer;
+    
     int N,ii=0,j,i;
     octree<float> tree;
     vector<vector<float>> init_value,Center_MM,boundary_subcube,members1,members2,list_node1,list_node2,list_cell1,list_cell2;
@@ -214,23 +199,28 @@ int main(int argc, const char * argv[]){
         members1.at(0).push_back(init_value[j][0]);
         init_value[j][8]=ii;}
     for(i=1; i<9; ++i){
-        members1.push_back(J); members2.push_back(J);
+        members1.push_back(J); members2.push_back(J); list_cell1.push_back(J);list_cell2.push_back(J);
         Center_MM.push_back(J);boundary_subcube.push_back(J); p_push(boundary_subcube,6,i,1);}
     cells_arange.push_back(0);
     apply_changes(init_value,boundary_subcube,members1,N,0);
     radius(Center_MM,boundary_subcube,ii);
     tree.root(init_value,Center_MM,members1,ii);
     det_boundary_subcube(boundary_subcube,ii,0);
-    tree.strc(init_value,boundary_subcube, Center_MM, members1,members2,cells_arange,ii, 0);
-    tree.cell_list(init_value,Center_MM,members1,members2,list_cell1,list_cell2,N);
+    tree.strc(init_value,boundary_subcube, Center_MM, members1,members2,cells_arange,list_cell1,list_cell2, ii, 0);
     
     
+    for(i=0; i<N; ++i){
+        list_node1.push_back(J); list_node2.push_back(J);
+        tree.traverse_tree(init_value, Center_MM, list_cell1, list_cell2, list_node1,list_node2, i, 0);}
+    
+    boost::timer::cpu_timer timer;
     //for (it=0; it<Iteration_times; ++it) =>for iterations times
-    for (i=0; i<N; ++i){
-        force[i]=tree.compute_force(init_value,Center_MM,list_cell1,list_cell2,init_value[i][8],i,0);
-    }
+    for (i=0; i<N; ++i)
+        force[i]=tree.compute_force(init_value,Center_MM,list_node1,list_node2,i,0);
     boost::timer::cpu_times elapsed = timer.elapsed();
     std::cout << " CPU TIME: " << (elapsed.user + elapsed.system) / 1e9 << " seconds"<< " WALLCLOCK TIME: " << elapsed.wall / 1e9 << " seconds"<< std::endl;
+    
+    
     
     return 0;
 }
