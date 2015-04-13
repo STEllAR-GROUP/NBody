@@ -23,9 +23,9 @@ typedef basic_ofstream<char> ofstream;
 
 //Parameters for computing force and well seperated cells for each node
 struct Parameters{
-    int th=10, it=100;
+    int th=100, it=4;
     double time_step=0.1;
-    double theta=3, G1=6.673*pow(10.0,-11.0);
+    double theta=0.1, G1=6.673*pow(10.0,-11.0);
 };
 
 //Data for each node
@@ -38,7 +38,7 @@ struct Body {
 struct Cell {
     int ID2, parent2,NumNodes=0,level,neighbors[6]={-1,-1,-1,-1,-1,-1},Ncell;
     vector<int> members, child,scell, list_cell1, list_cell2;
-    double r2[3],rd[3],m2,boundary[6];
+    double r2[3],rd[3],m2=0,boundary[6];
 };
 
 //Read input from txt file
@@ -77,7 +77,7 @@ bool InCube(Body body[], vector<Cell> &cell, int node, int p){
     return true;}
 
 //Determining the boundry of the each subcube
-void det_boundary_subcube(vector<Cell> &cell,int n, Body body[]){
+void det_boundary_subcube(vector<Cell> &cell,int n){
     double a1,a2,a3,b1,b2,b3,c1,c2,c3; Cell cell1[8];
    
     
@@ -126,39 +126,37 @@ template <class type> void octree<type>::strc(Parameters params,vector<Cell> &ce
     int i,j,p; octree<float> tree; Cell cell1;
     p=(cell[n].Ncell)*8;
     
-    
     for(i=1; i<9; ++i){
         cell[i+p].level=cell[n].level+1; cell[i+p].ID2=i+p;
         cell[i+p].parent2=cell[n].ID2; cell[i+p].NumNodes=0;
         
-        for(j=0; j<cell[n].NumNodes; ++j){
+        for(j=0; j<cell[n].members.size(); ++j){
             if(InCube(body,cell,cell[n].members[j],i+p)==true){
                 cell[i+p].members.push_back(cell[n].members[j]);
                 cell[i+p].NumNodes=cell[i+p].NumNodes+1;
                 body[cell[n].members[j]].parent=i+p;}}
         
-        if(cell[i+p].NumNodes>=1 && cell[i+p].NumNodes<=params.th){
-            if(cell[i+p].NumNodes==1){
-                cell[n].child.push_back(cell[i+p].members[0]);
-                cell[i+p].child.push_back(cell[i+p].members[0]);}
-            else{
-                cell[i+p].level=cell[n].level+1;
-                cell_arrange.push_back(cell[i+p].ID2);
-                cell[n].scell.push_back(cell[i+p].ID2);
-                for(j=0; j<cell[i+p].NumNodes; ++j){
-                    cell[i+p].child.push_back(cell[i+p].members[j]);}}}
+        if(cell[i+p].members.size()>1) tree.root(cell,body,i+p);
+        if(cell[i+p].members.size()==1) cell[n].child.push_back(cell[i+p].members[0]);
         
-        if(cell[i+p].NumNodes>params.th){
+        if(cell[i+p].members.size()>1 && cell[i+p].members.size()<=params.th){
+                cell[i+p].level=cell[n].level+1;
+                cell[n].scell.push_back(cell[i+p].ID2);
+                cell[i+p].parent2=n;
+                for(j=0; j<cell[i+p].members.size(); ++j){
+                    body[cell[i+p].members[j]].parent=i+p;
+                    cell[i+p].child.push_back(cell[i+p].members[j]);}}
+        
+        if(cell[i+p].members.size()>params.th){
             cell[i+p].Ncell=(int)cell_arrange.size();
             cell_arrange.push_back(cell[i+p].ID2);
             cell[n].scell.push_back(cell[i+p].ID2);
-            cell[i+p].parent2=n;}}
+            cell[i+p].parent2=n;
+            det_boundary_subcube(cell,i+p);}}
     
     for(i=1; i<9; ++i)
-        if(cell[i+p].NumNodes>params.th){
-            tree.root(cell,body,i+p);
-            det_boundary_subcube(cell,i+p,body);
-            tree.strc(params,cell,body,cell_arrange,i+p);}}
+        if(cell[i+p].NumNodes>params.th)
+            tree.strc(params,cell,body,cell_arrange,i+p);}
 
 //Modifying octree when position of nodes are changed (1)
 template <class type> void octree<type>::insert_node(Parameters params,vector<Cell> &cell,Body body[],vector<int> &cell_arrange,int parent, int node){
@@ -188,7 +186,7 @@ template <class type> void octree<type>::new_tree(Parameters params,vector<Cell>
         for(int j=0; j<6; ++j)
             if(cell[parent].neighbors[j]!=-1 && k==-1)
                 if(InCube(body,cell,node,cell[parent].neighbors[j])==true){
-                    k=1; int temp=cell[parent].neighbors[j];// cout<<temp;
+                    k=1; int temp=cell[parent].neighbors[j];
                     tree.insert_node(params,cell,body,cell_arrange,temp,node);}
         
         if(k==-1 && cell[parent].parent2!=0)
@@ -215,12 +213,10 @@ template <class type> void octree<type>::neighbor(vector<Cell> &cell, Body body[
 
 //creating interaction list for each cell (1)
 template <class type> void octree<type>::cell_list(Parameters params,vector<Cell> &cell, Body body[], vector<int> &cell_arrange){
-    int i,temp; octree<float> tree;
-    for (i=0; i<cell_arrange.size(); ++i){ temp=-1;
-        if(cell[cell_arrange[i]].child.size()>=1)
-            temp=cell[cell_arrange[i]].child[0];
-        if(temp!=-1){
-            tree.traverse_tree(params,cell,body,cell_arrange[i],temp,0);}}}
+    int i; octree<float> tree;
+    for (i=0; i<cell.size(); ++i){
+        if(cell[i].child.size()>=1){
+            tree.traverse_tree(params,cell,body,cell[i].ID2,cell[i].child[0],0);}}}
 
 //creating interaction list for each cell (2)
 template <class type> void octree<type>::traverse_tree(Parameters params,vector<Cell> &cell, Body body[],int root,int node, int root2){
@@ -228,7 +224,8 @@ template <class type> void octree<type>::traverse_tree(Parameters params,vector<
     octree<float> tree;
     float D=sqrt(pow((body[node].r1[0]-cell[root2].r2[0]),2.0)+pow((body[node].r1[1]-cell[root2].r2[1]),2.0)+pow((body[node].r1[2]-cell[root2].r2[2]),2.0));
     float r=sqrt(pow(cell[root2].rd[0],2.0)+pow(cell[root2].rd[1],2.0)+pow(cell[root2].rd[2],2.0));
-    if (D<(r/params.theta)){
+    float ratio=D/r;
+    if (ratio<params.theta){
         if(cell[root2].child.size()>=1)
             for(i=0; i<cell[root2].child.size(); ++i)
                 cell[root].list_cell1.push_back(cell[root2].child[i]);
@@ -241,7 +238,7 @@ template <class type> void octree<type>::traverse_tree(Parameters params,vector<
 //computing force, new position and new velocity
 template <class type> void octree<type>::compute_force(Parameters params,vector<Cell> &cell,Body body[],int parent,int node){
     vector<float> a(3,0); double t=params.time_step;
-    double G=params.G1; //////Get it from input
+    double G=params.G1;
     if(cell[parent].list_cell1.size()!=0)
         for(int j=0; j<3; ++j)
             for (int i=0; i<cell[parent].list_cell1.size(); ++i)
@@ -279,7 +276,7 @@ int main(int argc, const char * argv[]){
     cell.push_back(cell1);
     apply_changes(cell,0,body);
     tree.root(cell,body,0);
-    det_boundary_subcube(cell,0,body);
+    det_boundary_subcube(cell,0);
     tree.strc(params,cell,body,cell_arrange,0);
     tree.neighbor(cell,body,cell_arrange);
     
@@ -296,6 +293,10 @@ int main(int argc, const char * argv[]){
     boost::timer::cpu_times elapsed = timer.elapsed();
     std::cout << " CPU TIME: " << (elapsed.user + elapsed.system) / 1e9 << " seconds"<< " WALLCLOCK TIME: " << elapsed.wall / 1e9 << " seconds"<< std::endl;
     
+    
+    for(i=0; i<N; ++i)
+       cout<<pow((pow(body[i].force[0],2.0)+pow(body[i].force[1],2.0)+pow(body[i].force[2],2.0)),0.5)<<",";
+
     return 0;
     
 }
