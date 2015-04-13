@@ -5,8 +5,6 @@
 //  Created by Zahra Khatami on 4/10/15.
 //  Copyright (c) 2015 Zahra Khatami. All rights reserved.
 
-//plot results and compare them
-//if you can plot them on something that shows moving
 
 #include <iostream>
 #include <string>
