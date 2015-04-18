@@ -114,21 +114,13 @@ float foo1(float a1, float b1){
 }
 HPX_PLAIN_ACTION(foo1,foo1_action);
 
-float foo2(float a1, float b2){
-    
-    if(a1>b2) b2=a1;
-    
-    return b2;
-}
-HPX_PLAIN_ACTION(foo2,foo2_action);
-
 void apply_changes1(vector<Cell> &cell, Body body[],int n){
 
     vector<hpx::future<float>> vec1, vec2;
     for(int j=0; j<cell[n].A.size(); ++j){
         float a1=body[j].r1[0], b1=cell[n].boundary[2*j], b2=cell[n].boundary[2*j+1];
         vec1.push_back(hpx::async<foo1_action>(hpx::find_here(), a1, b1));
-        vec2.push_back(hpx::async<foo1_action>(hpx::find_here(), a1, b2));}
+        vec2.push_back(hpx::async<foo1_action>(hpx::find_here(), b2, a1));}
     
     for(int j=0; j<cell[n].A.size(); ++j)
         cell[n].boundary[2*j]=vec1[j].get();
@@ -255,7 +247,27 @@ void sort_merge(vector<int> &A,Body body[], int low,int high, int N){
         sort_merge(A,body,mid+1,high,N);
         merge(A,body,low,mid,high,N);}}
 
-void merge(vector<int> &A,Body body[],int low, int mid, int high, int N){
+//####################################################
+
+void sort_merge(vector<int> &A,Body body[], int low,int high, int N){
+    int mid; vector<hpx::future<double>> vec1,vec2,vec3;
+    
+    if(low<high){
+        mid=(low+high)/2;
+        
+        
+    }
+    if(low<high){
+        mid=(low+high)/2;
+        sort_merge(A,body,low,mid,N);
+        sort_merge(A,body,mid+1,high,N);
+        merge(A,body,low,mid,high,N);}
+}
+
+//####################################################
+
+
+/*void merge(vector<int> &A,Body body[],int low, int mid, int high, int N){
     int h,i,j,k,B[N];
     i=low; h=low; j=mid+1;
     while((h<=mid) && (j<=high)){
@@ -280,7 +292,57 @@ void merge(vector<int> &A,Body body[],int low, int mid, int high, int N){
             body[A[k]].num_A=i;
             i=i+1;}
     for(k=low; k<=high; ++k)
-        A[k]=B[k];}
+        A[k]=B[k];}*/
+//#################################################### //merge
+
+int foo23(int a1){
+    return a1;
+}
+HPX_PLAIN_ACTION(foo23,foo23_action);
+
+void merge(vector<int> &A,Body body[],int low, int mid, int high, int N){
+    
+    int h,i,j,k,B[N]; vector<hpx::future<int>> vec1,vec2;
+    i=low; h=low; j=mid+1;
+    while((h<=mid) && (j<=high)){
+        if((body[A[h]].Hilbert_dis<body[A[j]].Hilbert_dis)){
+            B[i]=body[A[h]].ID1;
+            body[A[h]].num_A=i;
+            h++; }
+        else{
+            B[i]=body[A[j]].ID1;
+            body[A[j]].num_A=i;
+            j++;}
+        i=i+1;}
+    
+    if(h>mid)
+        for(k=j;k<=high; ++k)
+            vec1.push_back(hpx::async<foo23_action>(hpx::find_here(),A[k]));
+    else
+        for(k=h; k<=mid; ++k)
+            vec1.push_back(hpx::async<foo23_action>(hpx::find_here(),A[k]));
+    
+    if(h>mid)
+        for(k=j;k<=high; ++k){
+            int temp=vec1[k].get();
+            B[i]=body[temp].ID1;
+            body[temp].num_A=i;
+            i=i+1;}
+    else
+        for(k=h; k<=mid; ++k){
+            int temp=vec1[k].get();
+            B[i]=body[temp].ID1;
+            body[temp].num_A=i;
+            i=i+1;}
+    
+    for(k=low; k<=high; ++k)
+        vec2.push_back(hpx::async<foo23_action>(hpx::find_here(),B[k]));
+    
+    for(k=low; k<=high; ++k)
+        A[k]=vec2[k].get();
+}
+
+//####################################################
 
 //creating octree and determining its parameters
 template<class type> class octree {
@@ -317,11 +379,6 @@ double foo3(double a1){
 }
 HPX_PLAIN_ACTION(foo3,foo3_action);
 
-double foo4(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo4,foo4_action);
-
 double foo5(double a1, double b2){
     return a1*b2;
 }
@@ -345,7 +402,7 @@ template <class type> void octree<type>::root1(vector<Cell> &cell, Body body[], 
     
     if(!cell[n].A.empty()){
         for (int j=0; j<cell[n].A.size(); ++j){
-            vec2.push_back(hpx::async<foo4_action>(hpx::find_here(), body[cell[n].A[j]].m1));
+            vec2.push_back(hpx::async<foo3_action>(hpx::find_here(), body[cell[n].A[j]].m1));
             for (int i=0; i<3; ++i)
                 vec3.push_back(hpx::async<foo5_action>(hpx::find_here(), body[cell[n].A[j]].r1[i], body[cell[n].A[j]].m1));}
         
@@ -425,18 +482,13 @@ template <class type> void octree<type>::strc(Parameters params,vector<Cell> &ce
 
 //#################################################//Modifying octree when position of nodes are changed(1)
 
-double foo20(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo20,foo20_action);
-
 template <class type> void octree<type>::insert_node(Parameters params,vector<Cell> &cell,Body body[], int newcell, int node){
     octree<float> tree;int k=-1; vector<hpx::future<double>> vec1;
     
     if(!cell[newcell].scell.empty())
         for(int i=0; i<8; ++i)
             if(InCube(params,body,cell,node,cell[newcell].scell[i])==true && k==-1){k=1;
-                vec1.push_back(hpx::async<foo20_action>(hpx::find_here(),cell[newcell].scell[i]));}
+                vec1.push_back(hpx::async<foo3_action>(hpx::find_here(),cell[newcell].scell[i]));}
     
     if(!cell[newcell].scell.empty())
         for(int i=0; i<8; ++i)
@@ -465,18 +517,13 @@ template <class type> void octree<type>::insert_node(Parameters params,vector<Ce
 
 //#################################################//Modifying octree when position of nodes are changed (2)
 
-double foo19(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo19,foo19_action);
-
 template <class type> void octree<type>::new_tree(Parameters params,vector<Cell> &cell,Body body[],int parent,int node){
     int k=-1; octree<float> tree; vector<hpx::future<double>> vec1;
     if (parent!=0){
         for(int j=0; j<7; ++j)
             if(cell[parent].neighbors[j]!=-1 && k==-1)
                 if(InCube(params,body,cell,node,cell[parent].neighbors[j])==true){ k=1;
-                    vec1.push_back(hpx::async<foo19_action>(hpx::find_here(),cell[parent].neighbors[j]));}
+                    vec1.push_back(hpx::async<foo3_action>(hpx::find_here(),cell[parent].neighbors[j]));}
         
         for(int j=0; j<7; ++j)
             if(cell[parent].neighbors[j]!=-1 && k==-1)
@@ -499,18 +546,13 @@ template <class type> void octree<type>::new_tree(Parameters params,vector<Cell>
 
 //#################################################### //creating interaction list for each cell (1)
 
-double foo18(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo18,foo18_action);
-
 template <class type> void octree<type>::cell_list(Parameters params,vector<Cell> &cell, Body body[]){
     octree<float> tree; vector<hpx::future<double>> vec1;
     
     for (int i=0; i<cell.size(); ++i)
         if(!cell[i].A.empty())
             if(!cell[i].child.empty())
-                vec1.push_back(hpx::async<foo18_action>(hpx::find_here(),cell[i].child[0]));
+                vec1.push_back(hpx::async<foo3_action>(hpx::find_here(),cell[i].child[0]));
     
     for (int i=0; i<cell.size(); ++i)
         if(!cell[i].A.empty())
@@ -538,15 +580,6 @@ template <class type> void octree<type>::cell_list(Parameters params,vector<Cell
         cell[root].list_cell2.push_back(cell[root2].ID2);}*/
 //#################################################### //creating interaction list for each cell (2)
 
-double foo16(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo16,foo16_action);
-
-double foo17(double m1){
-    return m1;
-}
-HPX_PLAIN_ACTION(foo17,foo17_action);
 
 template <class type> void octree<type>::traverse_tree(Parameters params,vector<Cell> &cell, Body body[],int root,int node, int root2){
     int i;
@@ -558,7 +591,7 @@ template <class type> void octree<type>::traverse_tree(Parameters params,vector<
     if (ratio<params.theta)
         if(cell[root2].child.size()>=1)
             for(i=0; i<cell[root2].child.size(); ++i)
-                vec1.push_back(hpx::async<foo16_action>(hpx::find_here(), cell[root2].child[i]));
+                vec1.push_back(hpx::async<foo3_action>(hpx::find_here(), cell[root2].child[i]));
     
     if (ratio<params.theta)
         if(cell[root2].child.size()>=1)
@@ -569,7 +602,7 @@ template <class type> void octree<type>::traverse_tree(Parameters params,vector<
     if (ratio<params.theta)
         if(cell[root2].scell.size()>=1)
             for(i=0; i<cell[root2].scell.size(); ++i)
-                vec2.push_back(hpx::async<foo17_action>(hpx::find_here(),cell[root2].scell[i]));
+                vec2.push_back(hpx::async<foo3_action>(hpx::find_here(),cell[root2].scell[i]));
             
     if (ratio<params.theta)
         if(cell[root2].scell.size()>=1)
@@ -673,7 +706,7 @@ void compute_force1(Parameters params,vector<Cell> &cell,Body body[],int parent,
     vector<double> a(3,0); int i, j;
     vector<hpx::id_type> locs=hpx::find_all_localities();
     std::vector<hpx::future<std::vector<double>>> vec1, vec2;
-    vector<hpx::future<double>> vec3,vec4,vec5; vector<double> A; vector<vector<double>> B;
+    vector<hpx::future<double>> vec3,vec4,vec5; vector<double> A,A2; vector<vector<double>> B;
     
     if(cell[parent].list_cell1.size()!=0)
         for (i=0; i<cell[parent].list_cell1.size(); ++i)
@@ -687,7 +720,7 @@ void compute_force1(Parameters params,vector<Cell> &cell,Body body[],int parent,
     
     if(cell[parent].list_cell2.size()!=0)
         for (i=0; i<cell[parent].list_cell2.size(); ++i)
-            vec2.push_back(hpx::async<foo10_action>(locs[i],A,params,cell,body,parent,node,i));
+            vec2.push_back(hpx::async<foo10_action>(locs[i],A2,params,cell,body,parent,node,i));
     
     if(cell[parent].list_cell2.size()!=0)
         for (i=0; i<cell[parent].list_cell2.size(); ++i)
@@ -713,11 +746,84 @@ void compute_force1(Parameters params,vector<Cell> &cell,Body body[],int parent,
     
 }
 
-//####################################################
+//#################################################### compute_step
 
 
+void compute_step(Parameters params,vector<Cell> &cell,Body body[], int N){
+    
+    int i,p,n; octree<float> tree; vector<hpx::future<int>> vec1;
+    
+    for (i=0; i<N; ++i)
+        vec1.push_back(hpx::async<foo23_action>(hpx::find_here(),i));
+        
+        
+    for (i=0; i<N; ++i){
+        p=body[vec1[i].get()].parent; n=vec1[i].get();
+        compute_force1(params,cell,body,p,n);
+        
+        if((InCube(params,body,cell,i,body[i].parent)==false)){
+            cell[body[i].parent].NumNodes=cell[body[i].parent].NumNodes-1;
+            if(InCube(params,body,cell,i,0)==true)
+                tree.new_tree(params,cell,body,body[i].parent,i);}}
+
+
+}
+//#################################################### //hpx_main
 
 int hpx_main(){
+    
+    int i; vector<hpx::future<int>> vec1; vector<hpx::future<double>> vec2,vec3;
+    vector<int> cell_arrange; octree<float> tree;
+    vector<int> m, list_cell1, list_cell2;
+    int N; string temp; fstream textfile;
+    textfile.open("ex1000.txt");
+    textfile>>temp;
+    N = atoi(temp.c_str());
+    Parameters params;
+    Body *body=new Body[N];
+    vector<Cell> cell;
+    Cell cell1,cell2;
+    read_Input(body);
+    cell_arrange.push_back(0);
+    cell1.NumNodes=N; cell1.ID2=0; cell1.level=0;
+    cell1.Ncell=0;
+    
+    for(i=0; i<N; ++i)
+        vec1.push_back(hpx::async<foo23_action>(hpx::find_here(),i));
+    
+    for(i=0; i<N; ++i)
+        cell1.A.push_back(vec1[i].get());
+    
+    cell.push_back(cell1);
+    Hilbert1(body,N);
+    sort_merge(cell[0].A,body,0,N,N);
+    apply_changes1(cell,body,0);
+    for(int j=1; j<9; ++j)
+        cell.push_back(cell2);
+    tree.root1(cell,body,0);
+    tree.strc(params,cell,body,cell_arrange,0);
+    
+    boost::timer::cpu_timer timer;
+    tree.cell_list(params,cell,body);
+    
+    for(int it=0 ; it<params.it; it++)
+        compute_step(params,cell,body,N);
+    
+    boost::timer::cpu_times elapsed = timer.elapsed();
+    std::cout << " CPU TIME: " << (elapsed.user + elapsed.system) / 1e9 << " seconds"<< " WALLCLOCK TIME: " << elapsed.wall / 1e9 << " seconds"<< std::endl;
+    
+    hpx::finalize();
+    return 0;
+}
+
+//#################################################### main()
+
+int main(){
+    return hpx::init();
+}
+//####################################################
+
+/*int main(){
     
     int i;
     vector<int> cell_arrange; octree<float> tree;
@@ -734,12 +840,15 @@ int hpx_main(){
     cell_arrange.push_back(0);
     cell1.NumNodes=N; cell1.ID2=0; cell1.level=0;
     cell1.Ncell=0;
+    
     for(i=0; i<N; ++i)
         cell1.A.push_back(i);
+    
     cell.push_back(cell1);
     Hilbert1(body,N);
     sort_merge(cell[0].A,body,0,N,N);
     apply_changes1(cell,body,0);
+    
     for(int j=1; j<9; ++j)
         cell.push_back(cell2);
     
@@ -764,6 +873,6 @@ int hpx_main(){
     
     
     
-    return 0;
+    return hpx::init();
     
-}
+}*/
