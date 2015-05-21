@@ -423,9 +423,7 @@ int main(int argc, char** argv){
     // assign threads to place close to the place of parent thread. it decreases extra overhead.
     
     boost::timer timer;
-    
-    int N1=50000;
-    
+   
     for (int t = 0; t < it; t++) {
         #pragma omp parallel for schedule (dynamic,3) num_threads(4)
         for(int i=0; i<N; ++i)
