@@ -348,7 +348,7 @@ std::vector<double> compute_step5(int parent, int node, int i, double a1, double
 
     return out;}
 
-std::vector<double> compute2(int node){
+void compute2(int node){
 
     double G=G1; octree<float> tree;
     using hpx::lcos::local::dataflow;
@@ -368,13 +368,17 @@ std::vector<double> compute2(int node){
     solution2.resize(N2);
 
     if (N1 >= 1) {
-
-        for(int i=0; i<N1; ++i)
+        
+        using namespace hpx::parallel;
+        for_each(par, iterator(0), iterator(N1), [&](int i) {
             solution1[i] = compute_step2(body[node].parent, node, i, G, body[node].m1,
                                          body[cell[parent].list_cell1[i]].m1, body[node].r1[0],
                                          body[cell[parent].list_cell1[i]].r1[0],
                                          body[node].r1[1], body[cell[parent].list_cell1[i]].r1[1],
                                          body[node].r1[2], body[cell[parent].list_cell1[i]].r1[2]);
+        });
+
+
 
         for (int i = 0; i < N1; ++i) {
             B = solution1[i];
@@ -383,12 +387,15 @@ std::vector<double> compute2(int node){
 
     if (N2 >= 1) {
 
-        for(int i=0; i<N2; ++i)
+        using namespace hpx::parallel;
+        for_each(par, iterator(0), iterator(N2), [&](int i) {
             solution2[i] = compute_step5(body[node].parent, node, i, G, body[node].m1,
                                          cell[cell[parent].list_cell2[i]].m2, body[node].r1[0],
                                          cell[cell[parent].list_cell2[i]].r2[0],
                                          body[node].r1[1], cell[cell[parent].list_cell2[i]].r2[1],
                                          body[node].r1[2], cell[cell[parent].list_cell2[i]].r2[2]);
+        });
+        
 
         for (int i = 0; i < N2; ++i) {
             A = solution2[i];
@@ -404,14 +411,12 @@ std::vector<double> compute2(int node){
     if(!InCube(node,parent)){
         cell[body[node].parent].NumNodes=cell[body[node].parent].NumNodes-1;
         if(InCube(node,0))
-            tree.new_tree(parent,node); }
+            tree.new_tree(parent,node);}
 
-    return body[node].r1;
 }
 
-double compute(int node1){
+void compute(int node1){
 
-    double f3=2.0;
     int start=0, end=node1;
     using hpx::lcos::local::dataflow;
     using hpx::util::unwrapped;
@@ -425,8 +430,6 @@ double compute(int node1){
     for_each(par, iterator(start), iterator(end), [&](int i) {
         compute2(i);
     });
-
-    return f3;
 }
 
 int hpx_main(int argc, char** argv){
@@ -494,7 +497,17 @@ int hpx_main(int argc, char** argv){
     boost::timer timer;
 
     int N1=50000;
-    futures.reserve(N1);
+    
+    for (int t = 0; t < it; t++) {
+        using namespace hpx::parallel;
+        for_each(par, iterator(0), iterator(N1), [&](int i) {
+            compute(i);
+        });
+    }
+    
+    
+    
+    /*futures.reserve(N1); //It is not necessasry to use dataflow here!
     for (int i = 0; i < N1; ++i)
         futures.push_back(hpx::make_ready_future(42.0));
 
@@ -505,7 +518,7 @@ int hpx_main(int argc, char** argv){
         });
 
         hpx::wait_all(futures);
-    }
+    }*/
 
     double elapsed_time = timer.elapsed();
     std::cout << " CPU TIME: " << elapsed_time << endl;
