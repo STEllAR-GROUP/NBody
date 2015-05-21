@@ -421,7 +421,6 @@ int main(int argc, char** argv){
 
     boost::timer timer;
 
-    int N1=50000;
     
     for (int t = 0; t < it; t++) {
         
