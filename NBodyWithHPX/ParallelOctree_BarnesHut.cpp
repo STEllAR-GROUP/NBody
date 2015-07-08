@@ -78,10 +78,6 @@ template <class type> void octree<type>::strc2(int n){
         if(cell[p+i].members.size()>th){
             cell[n].scell.push_back(p+i);
             cell[p+i].parent2=n;
-
-            if(cell.size()<(p+i)*8+9)
-                for(int k=cell.size(); k<(p+i)*8+1000; ++k)
-                    cell.push_back(cell1);
             det_boundary_subcube(p+i);
          }}
 

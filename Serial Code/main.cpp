@@ -425,7 +425,7 @@ int main(int argc, char** argv){
     for (int t = 0; t < it; t++) {
         
         for(int i=0; i<N; ++i)
-            compute2(i);
+            For_Each_Node(i);
     }
 
 
