@@ -108,28 +108,22 @@ template <class type> void octree<type>::strc(int n){
     using hpx::parallel::par;
     typedef boost::counting_iterator<int> iterator;
     p=n*8; Cell cell1;
-
     for(i=1; i<9; ++i){
         cell[i+p].level=cell[n].level+1; cell[i+p].ID2=i+p; cell[n].scell.push_back(i+p);
         cell[i+p].parent2=cell[n].ID2; cell[i+p].NumNodes=(int)ceil((float)((cell[n].members.size())/8));
-
-        for(j=1; j<9; ++j) //neighbors for each cells
+        for(j=1; j<9; ++j)
             if(i!=j){
                 cell[i+p].neighbors.push_back(cell[i+p].ID2);}
-
         int start=(int)ceil((i-1)*((float)(cell[n].members.size())/8)), en=(int)ceil((i)*((float)cell[n].members.size()/8)); a1[i]=0, b1[i]=0, c1[i]=0;
         if(start<en){
             for(int k=start; k<en; ++k){
                 cell[i+p].members.push_back(cell[n].members[k]);
                 body[cell[n].members[k]].parent=i+p;}}
-
         for(int j=0; j<3; ++j){
             cell[i+p].r2.push_back(0);
             cell[i+p].rd.push_back(0);}
-
         for(int j=0; j<6; ++j)
             cell[i+p].boundary.push_back(0);
-
         apply_changes(i+p);
         tree.root(i+p);
         a1[i]=abs(cell[i+p].boundary[1]-cell[i+p].boundary[0]), b1[i]=abs(cell[i+p].boundary[3]-cell[i+p].boundary[2]), c1[i]=abs(cell[i+p].boundary[5]-cell[i+p].boundary[4]);
