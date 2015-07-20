@@ -9,17 +9,13 @@ vector<int> to_binary(unsigned int coord){
         sum=sum+(i*rem);
         coord=coord/2;
         i=i*10;}
-
     while(sum!=0){
         y.push_back(sum%10);
         sum/=10;}
-
-    return y;
-}
+    return y;}
 
 vector<int> Hilbert_distance(vector<int> &X,vector<int> &Y,vector<int> &Z, int m)
-{
-    int j; vector<int> H;
+{   int j; vector<int> H;
     j=m;
     while(j>0){
         j=j-1;
@@ -35,8 +31,7 @@ vector<int> Hilbert_distance(vector<int> &X,vector<int> &Y,vector<int> &Z, int m
             H.push_back(X[j]);
         else
             H.push_back(0);}
-    return H;
-}
+    return H;}
 
 void merge(vector<int> &A,int, int , int ,int);
 void sort_merge(vector<int> &A,int low,int high, int N){
