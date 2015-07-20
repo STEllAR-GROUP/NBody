@@ -179,38 +179,7 @@ template <class type> void octree<type>::root(int n){
     for (int i=0; i<3;++i){
         cell[n].r2[i]=CM[i]/cell[n].m2;
         cell[n].rd[i]=cell[n].boundary[2*i+1]-cell[n].boundary[2*i];}}
-
-//Arranging cells from root to leaf in Octree
-template <class type> void octree<type>::strc(int n){
-    int i,j,p; octree<float> tree;
-    p=(cell[n].Ncell)*8;
-    
-    for(i=1; i<9; ++i){
-        cell[i+p].ID2=i+p;
-        cell[i+p].NumNodes=0;
-        
-        for(j=0; j<cell[n].members.size(); ++j){
-            if(InCube(cell[n].members[j],i+p)){
-                cell[i+p].members.push_back(cell[n].members[j]);
-                cell[i+p].NumNodes=cell[i+p].NumNodes+1;}}
-        
-        //if(cell[i+p].members.size()>1) tree.root(i+p);
-        
-        if(cell[i+p].members.size()>=1 && cell[i+p].members.size()<=th){
-            for(j=0; j<cell[i+p].members.size(); ++j){
-                body[cell[i+p].members[j]].parent=n;
-                cell[n].child.push_back(cell[i+p].members[j]);}}
-        
-        if(cell[i+p].members.size()>th){
-            cell[i+p].Ncell=(int)cell_arrange.size();
-            cell_arrange.push_back(i+p);
-            cell[n].scell.push_back(i+p);
-            cell[i+p].parent2=n;
-            det_boundary_subcube(i+p);}}
-    
-    for(i=1; i<9; ++i)
-        if(cell[i+p].members.size()>th)
-            tree.strc(i+p);}
+           tree.strc(i+p);}
 
 /////////////////////////////////////////////////////////////////// Parellel Octree
 
