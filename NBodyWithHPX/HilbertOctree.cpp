@@ -291,9 +291,7 @@ hpx::future<void> strc3(int n){
     double a1[9],b1[9],c1[9];
     vector<double> r; int i;
 
-
-    hpx::future<double> r=async(A,n);
-
+    hpx::future<double> r=async(A,n); //A is Barnes-Hut based on Hilbert curve method
     return r.then([=](hpx::future<void> f){
 
         std::vector<hpx::future<void>> v;
@@ -301,7 +299,8 @@ hpx::future<void> strc3(int n){
 
         for(int i=1; i<9; ++i){
             int m=n*8+i;
-            a1[i] = r[(i - 1) * 3]; b1[i] = r[(i - 1) * 3 + 1]; c1[i] = r[(i - 1) * 3 + 2]; int p = n * 8;
+            a1[i] = r[(i - 1) * 3]; b1[i] = r[(i - 1) * 3 + 1];
+            c1[i] = r[(i - 1) * 3 + 2]; int p = n * 8;
             if(cell[p + i].members.size()>th)
                 if (a1[i] > th || b1[i] > th || c1[i] > th)
                     v.push_back(strc3(cell[m].ID2));}

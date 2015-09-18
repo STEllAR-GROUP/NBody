@@ -1,11 +1,14 @@
+#include <sstream>
+#include <vector>  
 
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx.hpp>
 #include <hpx/lcos/gather.hpp>
+#include <hpx/runtime/serialization/vector.hpp>
 #include <hpx/runtime/serialization/serialize.hpp>
+
 #include <boost/timer.hpp>
 #include <boost/shared_array.hpp>
-
 #include <stack>
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -24,11 +27,12 @@ struct Body
 {
 public:
     int ID1,parent,m1;
-    std::vector<double> r1,v1,force;
-
+    double r1[3], v1[3], force[3];
+    
+    friend class hpx::serialization::access;
     template<typename Ar> void serialize(Ar &ar, unsigned){
-        ar &ID1,&parent,& m1,& r1,& v1,&force;}
-};
+     ar &ID1 &parent &m1 &r1 &v1 &force;}
+}body1;
 
 struct Cell
 {
@@ -38,14 +42,16 @@ public:
     double m2;
     std::vector<double> r2, rd, boundary;
 
+    friend class hpx::serialization::access;  
     template<typename Ar> void serialize(Ar &ar, unsigned){
-        ar & ID2, & parent2,& NumNodes,&level,& members, &child, &scell,&neighbors, &list_cell1, &list_cell2,&m2,& r2,& rd,&boundary;}
+       ar &ID2 &parent2 &NumNodes &level &members &child &scell &neighbors &list_cell1 &list_cell2 &m2 &r2 &rd &boundary;}
 };
 
-std::vector<Body>* body;
 std::vector<Body> b;
 std::vector<Cell> cell(10000);
  
+template<typename Ar> void serialize(Ar &ar, unsigned){ 
+        ar & b & cell;}
 //--------------------------------------------------
 
 template <typename T>
@@ -97,8 +103,7 @@ private:
     std::stack<T*> heap_;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////////////////////////////////
 struct partition_data
 {
 private:
@@ -140,17 +145,18 @@ public:
               size_(size),
               min_index_(0)
     {
-
-      if(flag==1){
+        if(flag==1){
             for(std::size_t j=0; j<size_mem; ++j)
-                data_[j]=(*body)[cell[cell_IDs].members[j]];
+                data_[j]=b[cell[cell_IDs].members[j]];
+                 
             for(std::size_t j=size_mem; j<size; ++j){
-                data_[j]=(*body)[0];
-                data_[j].ID1=-1;}
+                data_[j]=b[0];
+                data_[j].ID1=-1;  
+            }
         }
         else
           for(std::size_t j=0; j<size; ++j){
-                data_[j]=(*body)[0];
+                data_[j]=b[0];
                 data_[j].ID1=-1;
         }  
   }
@@ -182,7 +188,7 @@ private:
     template <typename Archive>
     void serialize(Archive& ar, const unsigned int version)
     {
-        ar & data_ & size_ & min_index_;
+        ar & data_ & size_ & min_index_ ;
     }
 
 private:
@@ -262,7 +268,7 @@ inline std::size_t idx(std::size_t i, int dir, std::size_t size)
         HPX_ASSERT(temp < size);  
         return temp;
      }
-
+        
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -367,7 +373,6 @@ struct stepper_server : hpx::components::simple_component_base<stepper_server>
     }
 
     space do_work(std::size_t np, std::size_t nl);
-//    void do_work(std::size_t np, std::size_t nl);
     HPX_DEFINE_COMPONENT_ACTION(stepper_server, do_work, do_work_action);
 
     void from_R(std::size_t time, partition p) {
@@ -408,7 +413,7 @@ protected:
     static partition New_Members(partition const& ce0, partition const & From_N, int ID);
     static partition Non_Members(partition const& To_N_total, partition const & To_N);
     
-    void initialize_body(int N, Body body1);
+    void initialize_body(int N);
     void read_Input();
     void initialize_cell(int N);
     void apply_changes(int n);
@@ -473,21 +478,19 @@ struct stepper : hpx::components::client_base<stepper, stepper_server>
     {}
 
     hpx::future<stepper_server::space> do_work(std::size_t np, std::size_t nl) {
-   // hpx::future<void> do_work(std::size_t np, std::size_t nl){
         return hpx::async(do_work_action(), get_gid(), np, nl);
     }
 };
 //////////////////////////////////////////////////////////////////////////////
 
-void stepper_server::initialize_body(int N, Body body1)
-{
-    std::vector<double> A4(3,0);
-
+void stepper_server::initialize_body(int N)
+{    
     body1.ID1=0; body1.m1=0; body1.parent=0;
-    body1.r1=A4; body1.v1=A4; body1.force=A4;
-
+    for(int i=0; i<3; ++i){
+        body1.r1[i]=1.0; body1.v1[i]=1.0; body1.force[i]=0.0;
+    }
     for(int i=0; i<N; ++i)
-       b.push_back(body1);
+        b.push_back(body1);
 }
 
 void stepper_server::read_Input()
@@ -501,40 +504,44 @@ void stepper_server::read_Input()
     for (int i=0; i<N; ++i){
         textfile>>temp>>temp1;
         b[i].ID1=atoi(temp.c_str()); b[i].m1=stof(temp1,&sz);
-        for (int j=2; j<5; ++j){
+         for (int j=2; j<5; ++j){
             textfile>>temp; b[i].r1[j-2]=stof(temp,&sz);}
-        for (int j=5; j<8; ++j){
-            textfile>>temp; b[i].v1[j-5]=stof(temp,&sz);}
-        b[i].parent=0;}
+         for (int j=5; j<8; ++j){
+            textfile>>temp; b[i].v1[j-5]=stof(temp,&sz);}  
+    b[i].parent=0;
+    }
 }
 
 void stepper_server::initialize_cell(int N)
 {
-    std::vector<int> A2(6,-1); std::vector<double> A4(3,0),A5(6,0);
-
     cell[0].ID2=0; cell[0].parent2=0; cell[0].NumNodes=N; cell[0].level=0;
-    cell[0].neighbors=A2; cell[0].r2=A4; cell[0].rd=A4; cell[0].boundary=A5;
+    cell[0].neighbors.resize(6); cell[0].r2.resize(3); cell[0].rd.resize(3); cell[0].boundary.resize(6);
+    
+    cell[0].members.resize(N);
+    for(int i=0; i<3; ++i){ cell[0].r2[i]=0; cell[0].rd[i]=0; cell[0].boundary[2*i]=0; cell[0].boundary[2*i+1]=100;}
+    for(int i=0; i<6; ++i){cell[0].neighbors[i]=-1;}    
     for (int i = 0; i < N; ++i)
-        cell[0].members.push_back(i);
+            cell[0].members[i]=i;  
 }
 
 void stepper_server::apply_changes(int n)
 {
     for(int j=0; j<cell[n].NumNodes; ++j){
         int i=cell[n].members[j];
-        if ((*body)[i].r1[0]<cell[n].boundary[0]) cell[n].boundary[0]=(*body)[i].r1[0];
-        if ((*body)[i].r1[0]>cell[n].boundary[1]) cell[n].boundary[1]=(*body)[i].r1[0];
-        if ((*body)[i].r1[1]<cell[n].boundary[2]) cell[n].boundary[2]=(*body)[i].r1[1];
-        if ((*body)[i].r1[1]>cell[n].boundary[3]) cell[n].boundary[3]=(*body)[i].r1[1];
-        if ((*body)[i].r1[2]<cell[n].boundary[4]) cell[n].boundary[4]=(*body)[i].r1[2];
-        if ((*body)[i].r1[2]>cell[n].boundary[5]) cell[n].boundary[5]=(*body)[i].r1[2];}
+        if (b[i].r1[0]<cell[n].boundary[0]) cell[n].boundary[0]=b[i].r1[0];
+        if (b[i].r1[0]>cell[n].boundary[1]) cell[n].boundary[1]=b[i].r1[0];
+        if (b[i].r1[1]<cell[n].boundary[2]) cell[n].boundary[2]=b[i].r1[1];
+        if (b[i].r1[1]>cell[n].boundary[3]) cell[n].boundary[3]=b[i].r1[1];
+        if (b[i].r1[2]<cell[n].boundary[4]) cell[n].boundary[4]=b[i].r1[2];
+        if (b[i].r1[2]>cell[n].boundary[5]) cell[n].boundary[5]=b[i].r1[2];}
 }
 
 bool stepper_server::InCube(int node, int p)
 {
     for (int i=0; i<3; ++i)
-        if((*body)[node].r1[i]<cell[p].boundary[2*i] || (*body)[node].r1[i]>cell[p].boundary[2*i+1])
-            return false;
+       if(b[node].r1[i]<cell[p].boundary[2*i] || b[node].r1[i]>cell[p].boundary[2*i+1])
+    
+       return false;
     return true;
 }
 
@@ -565,11 +572,15 @@ void stepper_server::det_boundary_subcube(int n)
 
 void stepper_server::root(int n)
 {
-    std::vector<float> CM(3,0); cell[n].m2=0;
+    std::vector<float> CM; 
+    CM.resize(3); CM[0]=0; CM[1]=0; CM[2]=0;
+    cell[n].m2=0;
     for (int j=0; j<cell[n].members.size(); ++j){
-        cell[n].m2=cell[n].m2+(*body)[cell[n].members[j]].m1;
+        cell[n].m2=cell[n].m2+b[cell[n].members[j]].m1;
         for (int i=0; i<3; ++i)
-            CM[i]=CM[i]+(*body)[cell[n].members[j]].r1[i] * (*body)[cell[n].members[j]].m1;}
+            CM[i]=CM[i]+b[cell[n].members[j]].r1[i]*b[cell[n].members[j]].m1;
+  }
+   
     for (int i=0; i<3;++i){
         cell[n].r2[i]=CM[i]/cell[n].m2;
         cell[n].rd[i]=cell[n].boundary[2*i+1]-cell[n].boundary[2*i];}
@@ -577,26 +588,25 @@ void stepper_server::root(int n)
 
 void stepper_server::A(int n)
 {
-    cell[n].child.erase(cell[n].child.begin(),cell[n].child.begin()+cell[n].child.size());
-    cell[n].scell.erase(cell[n].scell.begin(),cell[n].scell.begin()+cell[n].scell.size());
     int p = n * 8;
     for (int i = 1; i < 9; ++i)
     {
         cell[p + i].ID2 = p + i;
+        cell[p + i].NumNodes=0;
         cell[p + i].level = cell[n].level + 1;
         cell[p + i].parent2 = n;
-        cell[p+i].members.erase(cell[p+i].members.begin(),cell[p+i].members.begin()+cell[p+i].members.size());
 
-        for (int j = 0; j < cell[n].members.size(); ++j) {
+        for (int j = 0; j < cell[n].NumNodes; ++j) 
             if (InCube(cell[n].members[j], p + i)) {
                 cell[p + i].members.push_back(cell[n].members[j]);
-                cell[p + i].NumNodes = cell[p + i].NumNodes + 1;}}
+                cell[p + i].NumNodes = cell[p + i].NumNodes + 1;
+            }
 
-        if (cell[p + i].members.size() > 1) root(p + i);
-        if (cell[p + i].members.size() >= 1 && cell[p + i].members.size() <= th) {
-            for (int j = 0; j < cell[p + i].members.size(); ++j) {
-                (*body)[cell[p + i].members[j]].parent = n;
-                cell[n].child.push_back(cell[p + i].members[j]);
+       if (cell[p + i].members.size() > 1) root(p + i);
+            if (cell[p + i].members.size() >= 1 && cell[p + i].members.size() <= th) {
+                for (int j = 0; j < cell[p + i].members.size(); ++j) {
+                    b[cell[p + i].members[j]].parent = n;
+                    cell[n].child.push_back(cell[p + i].members[j]);
             }}
 
         if (cell[p + i].members.size() > th) {
@@ -638,7 +648,7 @@ void stepper_server::neighbor()
 void stepper_server::traverse_tree(int root,int node, int root2)
 {
     int i;
-    float D=sqrt(pow(((*body)[node].r1[0]-cell[root2].r2[0]),2.0)+pow(((*body)[node].r1[1]-cell[root2].r2[1]),2.0)+pow(((*body)[node].r1[2]-cell[root2].r2[2]),2.0));
+    float D=sqrt(pow((b[node].r1[0]-cell[root2].r2[0]),2.0)+pow((b[node].r1[1]-cell[root2].r2[1]),2.0)+pow((b[node].r1[2]-cell[root2].r2[2]),2.0));
     float r=sqrt(pow(cell[root2].rd[0],2.0)+pow(cell[root2].rd[1],2.0)+pow(cell[root2].rd[2],2.0));
     float ratio=D/r;
     if (ratio<theta){
@@ -655,35 +665,35 @@ void stepper_server::traverse_tree(int root,int node, int root2)
 void stepper_server::cell_list(int N)
 {
     for (int i = 0; i < N; ++i)
-        if (cell[(*body)[i].parent].list_cell1.size() == 0 && cell[(*body)[i].parent].list_cell2.size() == 0)
-            traverse_tree((*body)[i].parent, i, 0);
+        if (cell[b[i].parent].list_cell1.size() == 0 && cell[b[i].parent].list_cell2.size() == 0)
+            traverse_tree(b[i].parent, i, 0);
 }
 
 void stepper_server::compute_r(int node){
 
     std::vector<float> a(3,0.0);
     int i,j,rs=-1;
-    int parent=(*body)[node].parent;
+    int parent=b[node].parent;
     if(cell[parent].list_cell1.size()>=1)
         for(j=0; j<3; ++j)
             for (i=0; i<cell[parent].list_cell1.size(); ++i)
-                (*body)[node].force[j]=(*body)[node].force[j]+(G * (*body)[node].m1 * (*body)[cell[parent].list_cell1[i]].m1) * ((*body)[node].r1[j]-(*body)[cell[parent].list_cell1[i]].r1[j])/pow((1+pow(((*body)[node].r1[0]-(*body)[cell[parent].list_cell1[i]].r1[0]),2.0)+pow(((*body)[node].r1[1]-(*body)[cell[parent].list_cell1[i]].r1[1]),2) +pow(((*body)[node].r1[2]-(*body)[cell[parent].list_cell1[i]].r1[2]),2.0)),1.5);
-
+                b[node].force[j]=b[node].force[j]+(G * b[node].m1 * b[cell[parent].list_cell1[i]].m1) * (b[node].r1[j]-b[cell[parent].list_cell1[i]].r1[j])/pow((1+pow((b[node].r1[0]-b[cell[parent].list_cell1[i]].r1[0]),2.0)+pow((b[node].r1[1]-b[cell[parent].list_cell1[i]].r1[1]),2) +pow((b[node].r1[2]-b[cell[parent].list_cell1[i]].r1[2]),2.0)),1.5);
+    
     if(cell[parent].list_cell2.size()>=1)
         for(j=0; j<3; ++j)
             for (i=0; i<cell[parent].list_cell2.size(); ++i)
-                (*body)[node].force[j]=(*body)[node].force[j]+(G * (*body)[node].m1 * cell[cell[parent].list_cell2[i]].m2) * ((*body)[node].r1[j]-cell[cell[parent].list_cell2[i]].r2[j])/pow((1+pow(((*body)[node].r1[0]-cell[cell[parent].list_cell2[i]].r2[0]),2.0)+pow(((*body)[node].r1[1]-cell[cell[parent].list_cell2[i]].r2[1]),2.0)+pow(((*body)[node].r1[2]-cell[cell[parent].list_cell2[i]].r2[2]),2.0)),1.5);
-
+                b[node].force[j]=b[node].force[j]+(G * b[node].m1 * cell[cell[parent].list_cell2[i]].m2) * (b[node].r1[j]-cell[cell[parent].list_cell2[i]].r2[j])/pow((1+pow((b[node].r1[0]-cell[cell[parent].list_cell2[i]].r2[0]),2.0)+pow((b[node].r1[1]-cell[cell[parent].list_cell2[i]].r2[1]),2.0)+pow((b[node].r1[2]-cell[cell[parent].list_cell2[i]].r2[2]),2.0)),1.5);
+  
     for(j=0; j<3; ++j){
-        a[j]=(*body)[node].force[j]/(*body)[node].m1;
-        (*body)[node].r1[j]=(*body)[node].r1[j]+(*body)[node].v1[j] * t + 0.5*a[j]* t * t;}
+        a[j]=b[node].force[j]/b[node].m1;
+        b[node].r1[j]=b[node].r1[j]+b[node].v1[j] * t + 0.5*a[j]* t * t;}
 }
 
 void stepper_server::insert_node(int parent, int node)
 {
     cell[parent].NumNodes=cell[parent].NumNodes+1;
     cell[parent].members.push_back(node);
-    (*body)[node].parent=parent;
+    b[node].parent=parent;
 
     if(cell[parent].members.size()<=th)
         cell[parent].child.push_back(node);
@@ -748,14 +758,13 @@ void stepper_server::create_Octree()
     textfile >> temp;
     int N = (int) atoi(temp.c_str());
 
-    Body body1;
-    foo.initialize_body(N, body1);
+    foo.initialize_body(N);
     foo.read_Input();
-    body=&b;
     foo.initialize_cell(N);
     foo.apply_changes(0);
     foo.root(0);
     foo.det_boundary_subcube(0);
+    
     foo.strc3(0);
     foo.neighbor();
     foo.cell_list(cell.size());
@@ -781,7 +790,7 @@ partition stepper_server::compute_position(partition const &ce0,
                         for (std::size_t i = 0; i < size; ++i) {
                             next[i]=m[i];
                             if(m[i].ID1>0)
-                               compute_r(m[i].ID1);
+                                compute_r(m[i].ID1);
                         }
                         return next;
                     }
@@ -873,15 +882,15 @@ partition stepper_server::changed_members( partition const& ce0, partition const
                             next[i].ID1=-1;
                             if(m[i].ID1>=0){
                                 if (dir == -1) {
-                                    if ((*body)[m[i].ID1].r1[dim] < cell[cell_ID].boundary[2 * dim])
+                                    if (b[m[i].ID1].r1[dim] < cell[cell_ID].boundary[2 * dim])
                                         next[i].ID1 = m[i].ID1; }
 
                                 if(dir==1){
-                                    if ((*body)[m[i].ID1].r1[dim] > cell[cell_ID].boundary[2 * dim + 1])
+                                    if (b[m[i].ID1].r1[dim] > cell[cell_ID].boundary[2 * dim + 1])
                                         next[i].ID1 = m[i].ID1; }
                             }
                        }
-                        return next;
+                       return next;
                     }
             )
     );
@@ -897,11 +906,11 @@ partition stepper_server::changed_members( partition const& ce0, partition const
                         for(std::size_t i=0; i<size2; ++i)
                             if(l[i].ID1>0 && k<200){
                                 if (dir == -1) {
-                                    if ((*body)[m[i].ID1].r1[dim] < cell[cell_ID].boundary[2 * dim]){
+                                    if (b[m[i].ID1].r1[dim] < cell[cell_ID].boundary[2 * dim]){
                                         next[size-200+k]=m[i]; k=k+1;}}
 
                                 if(dir==1){
-                                    if ((*body)[m[i].ID1].r1[dim] > cell[cell_ID].boundary[2 * dim + 1]){
+                                    if (b[m[i].ID1].r1[dim] > cell[cell_ID].boundary[2 * dim + 1]){
                                         next[size-200+k]=m[i]; k=k+1;}}
                             }
                         return partition(ce0.get_gid(), next);
@@ -1013,15 +1022,13 @@ partition stepper_server::New_Members(partition const& ce0, partition const& Fro
 ///////////////////////////////////////////////////////////////////////////////
 
 stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
-//void stepper_server::do_work(std::size_t np, std::size_t nl)
 {
     using hpx::lcos::local::dataflow;
     using hpx::util::unwrapped;
 
     std::size_t local_np=np/nl;
     std::vector<hpx::id_type> localities = hpx::find_all_localities();
-    create_Octree();
-
+    create_Octree();  
     for (space& s: U_)
         s.resize(local_np);
     
@@ -1038,7 +1045,8 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
  
 
     for (std::size_t j = 0; j != local_np; ++j)
-         U_[0][j]=partition(here,SIZE,cell[cell_IDs[j]].members.size(),cell_IDs[j],1);    
+        U_[0][j]=partition(here,SIZE,cell[cell_IDs[j]].members.size(),cell_IDs[j],1);    
+
 
     Parent_[0][0]=partition(hpx::find_here(),SIZE,0,0,0);
 
@@ -1072,7 +1080,6 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
         From_R[0] = dataflow(hpx::launch::async, &stepper_server::New_Members, R[0], receive_R(time), ID_lc);
         From_U[0] = dataflow(hpx::launch::async, &stepper_server::New_Members, U[0], receive_U(time), ID_lc);
         From_D[0] = dataflow(hpx::launch::async, &stepper_server::New_Members, D[0], receive_D(time), ID_lc);
-
 
         for(std::size_t j=0; j<local_np; ++j) {
             int i = cell_IDs[j];
@@ -1129,10 +1136,9 @@ int hpx_main(boost::program_options::variables_map& vm)
     stepper step;
     std::cout<<nl<<"-"<<np<<std::endl;
 
-    //hpx::future<void> result = step.do_work(np, nl);
     hpx::future<stepper_server::space> result = step.do_work(np, nl);
   
-   if (0 == hpx::get_locality_id())
+    if (0 == hpx::get_locality_id())
     {
         boost::uint64_t const num_worker_threads = hpx::get_num_worker_threads();
 
@@ -1142,10 +1148,9 @@ int hpx_main(boost::program_options::variables_map& vm)
         std::vector<stepper_server::space> solution = overall_result.get();
         for (std::size_t j = 0; j != nl; ++j)
         {
-            stepper_server::space s = solution[j];
-    //        s[0].get_data(partition_server::cell0).wait();       
-  //          for (std::size_t i = 0; i != s.size(); ++i)             
-    //            s[i].get_data(partition_server::cell0).wait(); 
+            stepper_server::space s = solution[j];    
+            for (std::size_t i = 0; i != s.size(); ++i)             
+                s[i].get_data(partition_server::cell0).wait(); 
         }
 
     }
@@ -1156,6 +1161,9 @@ int hpx_main(boost::program_options::variables_map& vm)
 
     double elapsed_time = timer.elapsed();
     std::cout << std::endl << "FIRST CPU TIME: " << elapsed_time << std::endl;
+
+    for(int i=0; i<200; ++i)
+        std::cout<<b[i].r1[1]<<" , ";
 
     std::cout<<"END";
     return hpx::finalize();

@@ -181,7 +181,6 @@ hpx::future <void> A(int n) {
         cell[p + i].parent2 = n;
         cell[p + i].NumNodes=0;
 
-
         for (int j = 0; j < cell[n].NumNodes; ++j) {
             int temp=cell[n].members[j];
             if (InCube(temp, p + i) && body[temp].parent==n) {
@@ -197,20 +196,17 @@ hpx::future <void> A(int n) {
 
         if (cell[p + i].NumNodes > th) {
             cell[n].scell.emplace_back(p + i);
-            det_boundary_subcube(p + i);}}
-}
-
+            det_boundary_subcube(p + i);}}}
 
 
 hpx::future<void> strc3(int n){
 
     hpx::future<void> r=async(A,n);
-
+    
     return r.then([=](hpx::future<void> f){
-
         std::vector<hpx::future<void>> v;
         v.reserve(9);
-
+        
         for(int i=1; i<9; ++i){
             int m=n*8+i;
             if(cell[m].NumNodes>th)
