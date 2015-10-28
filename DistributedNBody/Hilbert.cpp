@@ -1148,14 +1148,6 @@ int hpx_main(boost::program_options::variables_map& vm)
         hpx::lcos::gather_there(gather_basename, std::move(result)).wait();
     }
 
-
-
- 
-  if(0==hpx::get_locality_id())
-        for(int i=0; i<200; ++i)
-            std::cout<<b[i].force[0]<<"," ; 
-
-
     std::cout<<"END"<<std::endl;
     return hpx::finalize();
 }

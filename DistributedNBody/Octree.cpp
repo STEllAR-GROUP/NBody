@@ -9,7 +9,7 @@
 #include <stack>
 ///////////////////////////////////////////////////////////////////////////////
 int n=1000000;
-int th=1000;
+int th=100;
 int nt=100;
 int t=1;     
 double G=6.673*pow(10.0,-11.0);
@@ -1136,8 +1136,8 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
             From_F[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, F[0], To_F_[j]);
             From_L[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, L[0], To_L_[j]);
             From_R[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, R[0], To_R_[j]);
-            //From_U[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, U[0], To_U_[j]);
-   //         From_D[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, D[0], To_D_[j]);*/
+            From_U[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, U[0], To_U_[j]);
+            From_D[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, D[0], To_D_[j]);*/
   
      }
 
@@ -1199,11 +1199,6 @@ int hpx_main(boost::program_options::variables_map& vm)
 
     std::cout<<std::endl;
 
-/*
-    if(0==hpx::get_locality_id())
-        for(int i=0; i<100; ++i)
-            std::cout<<b[i].force[0]<<" , ";
-*/
     return hpx::finalize();
 }
 
