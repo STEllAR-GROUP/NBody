@@ -14,17 +14,17 @@
 
 typedef unsigned int coord_t;
 ///////////////////////////////////////////////////////////////////////////////
-int n=1000000;
+int n=10000;
 int th=10;
 int nt=100;
 int t=1;     
-int th1=15;
+int th1=100;
 double G=6.673*pow(10.0,-11.0);
 float theta=0.7;
-int k_th=500;
+int k_th=200;
 
-char const* stepper_basename = "/Dist6/stepper/";
-char const* gather_basename = "/Dist6/gather/";
+char const* stepper_basename = "/Dist6b/stepper/";
+char const* gather_basename = "/Dist6b/gather/";
 
 //--------------------------------------------------
 struct Body
@@ -37,6 +37,17 @@ public:
     template<typename Ar> void serialize(Ar &ar, unsigned){
      ar &ID1 &parent &m1 &r1 &v1 &force;}
 }body1;
+
+struct test{
+    public:
+    int ID;
+    double f[3];
+
+    template<typename Ar> void serialize(Ar &ar, unsigned){ 
+        ar &ID &f;}
+};
+
+std::vector<test> T;
 
 struct Cell
 {
@@ -53,7 +64,7 @@ public:
 
 std::vector<int> A;
 std::vector<Body> b;
-std::vector<Cell> cell(100000);
+std::vector<Cell> cell(10000);
 
 //--------------------------------------------------
 
@@ -71,7 +82,7 @@ public:
 
     ~partition_allocator()
     {
-        mutex_type::scoped_lock l(mtx_);
+        mutex_type::scoped_lock l(mtx_); 
         while (!heap_.empty())
         {
             T* p = heap_.top();
@@ -82,7 +93,7 @@ public:
 
     T* allocate(std::size_t n)
     {
-        mutex_type::scoped_lock l(mtx_);
+        mutex_type::scoped_lock l(mtx_); 
         if (heap_.empty())
             return new T[n];
 
@@ -93,7 +104,7 @@ public:
 
     void deallocate(T* p)
     {
-        mutex_type::scoped_lock l(mtx_);
+        mutex_type::scoped_lock l(mtx_); 
         if (max_size_ == static_cast<std::size_t>(-1) || heap_.size() < max_size_)
             heap_.push(p);
         else
@@ -149,13 +160,16 @@ public:
               min_index_(0)
     {
         if(flag==1){
-            for(std::size_t j=0; j<size; ++j)
+            for(std::size_t j=0; j<size; ++j) {
                 data_[j]=b[cell[cell_IDs].members[j]];
+                data_[j].ID1=b[cell[cell_IDs].members[j]].ID1;                
+                data_[j].force[0]=1; data_[j].force[1]=1;
+                data_[j].force[2]=1;
+                }
             }
         
         else
           for(std::size_t j=0; j<size; ++j){
-                data_[j]=b[0];
                 data_[j].ID1=-1;
         }  
   }
@@ -163,7 +177,7 @@ public:
     partition_data(partition_data const& base, std::size_t min_index)
             : data_(base.data_.data()+min_index, 1, buffer_type::reference,
                     hold_reference(base.data_)),     
-              size_(base.size()),
+                      size_(base.size()),
               min_index_(min_index)
     {
         HPX_ASSERT(min_index < base.size());
@@ -324,29 +338,8 @@ protected:
 
     static partition New_Members(partition const& ce0, partition const & From_N, int ID);
     static partition Non_Members(partition const& To_N_total, partition const & To_N);
-    
-    static std::vector<int> get_cell_foreach_lc(std::size_t ID,std::size_t np,std::size_t nl);
-    static void new_tree(int node, int parent); 
-    static void insert_node(int parent, int node);  
-    static double* compute_r(int node);
-    static void create_Octree();
-    static void cell_list(int N); 
-    static void traverse_tree(int root,int node, int root2);
-    static void neighbor(); 
-    static hpx::future<void> strc3(int n);
-    static std::vector<double> AA(int n); 
-    static void root(int n);
-    static bool InCube(int node, int p);
-    static void apply_changes(int n);
-    static void create_Hilbert(int N);
-    static hpx::future<void> sort_merge(int low,int high, int N);
-    static void merge(int low, int mid, int high, int N);
-    static std::vector<int> Hilbert_distance(std::vector<int> &X,std::vector<int> &Y,std::vector<int> &Z, int m);
-    static std::vector<int> to_binary(unsigned int coord);
-    static void initialize_cell(int N); 
-    static void read_Input();  
-    static void initialize_body(int N); 
-        
+    static partition copy_mem(partition const& ce0);
+           
     
     partition receive_L(std::size_t time) { return Left_receive_buffer_.receive(time);}
     partition receive_R(std::size_t time) { return Right_receive_buffer_.receive(time);}
@@ -389,7 +382,7 @@ struct stepper : hpx::components::client_base<stepper, stepper_server>
 };
 //////////////////////////////////////////////////////////////////////////////
 
-void stepper_server::initialize_body(int N)
+void initialize_body(int N)
 {    
     body1.ID1=0; body1.m1=0; body1.parent=0;
     for(int i=0; i<3; ++i){
@@ -399,7 +392,7 @@ void stepper_server::initialize_body(int N)
         b.push_back(body1);
 }
 
-void stepper_server::read_Input()
+void read_Input()
 {
     int N=n;
     for (int i=0; i<N; ++i){
@@ -410,21 +403,20 @@ void stepper_server::read_Input()
             b[i].v1[j]=0;}}
 }
 
-void stepper_server::initialize_cell(int N)
+void initialize_cell(int n)
 {
-    cell[0].ID2=0; cell[0].parent2=0; cell[0].NumNodes=N; cell[0].level=0; 
+    cell[0].ID2=0; cell[0].parent2=0; cell[0].NumNodes=n; cell[0].level=0; 
     cell[0].neighbors.resize(2); cell[0].r2.resize(3); cell[0].rd.resize(3); cell[0].boundary.resize(6);
 
-    cell[0].members.resize(N);
         for(int i=0; i<3; ++i){ cell[0].r2[i]=0; cell[0].rd[i]=0; cell[0].boundary[2*i]=0; cell[0].boundary[2*i+1]=100;}
     	for(int i=0; i<2; ++i){cell[0].neighbors[i]=-1;}      
 
-    for (int i = 0; i < N; ++i){
+    for (int i = 0; i < n; ++i){
         cell[0].members.push_back(b[A[i]].ID1);}
 }
 //////////////////////////////////////////////////////////////
 
-std::vector<int> stepper_server::to_binary(unsigned int coord){
+std::vector<int> to_binary(unsigned int coord){
     long rem,sum=0;
     int i=1; std::vector<int> y;
     while(coord>0){
@@ -439,7 +431,7 @@ std::vector<int> stepper_server::to_binary(unsigned int coord){
 
     return y; }
 
-std::vector<int> stepper_server::Hilbert_distance(std::vector<int> &X,std::vector<int> &Y,std::vector<int> &Z, int m)
+std::vector<int> Hilbert_distance(std::vector<int> &X,std::vector<int> &Y,std::vector<int> &Z, int m)
 {
     int j; std::vector<int> H;
     j=m;
@@ -460,7 +452,7 @@ std::vector<int> stepper_server::Hilbert_distance(std::vector<int> &X,std::vecto
     return H; }
 
 
-void stepper_server::merge(int low, int mid, int high, int N){
+void merge(int low, int mid, int high, int N){
     int h,i,j,k;
     std::vector<int> B(N,0);
     i=low; h=low; j=mid+1;
@@ -490,7 +482,7 @@ void stepper_server::merge(int low, int mid, int high, int N){
         A[k]=B[k];
 }
 
-hpx::future<void> stepper_server::sort_merge(int low,int high, int N){ 
+hpx::future<void> sort_merge(int low,int high, int N){ 
    std::vector<hpx::future<void>> futures;
     int mid;
     if(low<high){  
@@ -502,7 +494,7 @@ hpx::future<void> stepper_server::sort_merge(int low,int high, int N){
 return hpx::when_all(futures);
 }
 
-void stepper_server::create_Hilbert(int N){
+void create_Hilbert(int N){
     std::vector<int>  X, Y, Z,H; int m;
     for(int i=0; i<N; ++i){
         int sum=0;
@@ -528,7 +520,7 @@ void stepper_server::create_Hilbert(int N){
 }
 //////////////////////////////////////////////////////////////
 
-void stepper_server::apply_changes(int n)
+void apply_changes(int n)
 {
     for(int j=0; j<cell[n].NumNodes; ++j){
         int i=cell[n].members[j];
@@ -540,7 +532,7 @@ void stepper_server::apply_changes(int n)
         if (b[i].r1[2]>cell[n].boundary[5]) cell[n].boundary[5]=b[i].r1[2];}
 }
 
-bool stepper_server::InCube(int node, int p)
+bool InCube(int node, int p)
 {
     for (int i=0; i<3; ++i)
        if(b[node].r1[i]<cell[p].boundary[2*i] || b[node].r1[i]>cell[p].boundary[2*i+1])
@@ -549,7 +541,7 @@ bool stepper_server::InCube(int node, int p)
     return true;
 }
 
-void stepper_server::root(int n)
+void root(int n)
 {
     std::vector<float> CM; 
     CM.resize(3); CM[0]=0; CM[1]=0; CM[2]=0;
@@ -567,7 +559,7 @@ void stepper_server::root(int n)
 
 /////////////////////////////////////////////////////////////////// Parellel Octree
 
-std::vector<double> stepper_server::AA(int n) {
+std::vector<double> AA(int n) {
 
     int p=n*8; std::vector<double> r;
     double a1[9],b1[9],c1[9];
@@ -576,10 +568,12 @@ std::vector<double> stepper_server::AA(int n) {
         cell[i+p].level=cell[n].level+1; cell[i+p].ID2=i+p; cell[n].scell.push_back(i+p);
         cell[i+p].parent2=cell[n].ID2; cell[i+p].NumNodes=(int)ceil((float)((cell[n].members.size())/8));
 
-        int start=(int)ceil((i-1)*((float)(cell[n].members.size())/8)), en=(int)ceil((i)*((float)cell[n].members.size()/8)); a1[i]=0, b1[i]=0, c1[i]=0;
+        int start=(int)floor((i-1)*((float)(cell[n].members.size())/8)), en=(int)floor((i)*((float)cell[n].members.size()/8)); 
+        a1[i]=0, b1[i]=0, c1[i]=0;
+
         if(start<en){
             for(int k=start; k<en; ++k){
-                cell[i+p].members.emplace_back(cell[n].members[k]);
+                cell[i+p].members.push_back(cell[n].members[k]);
                 b[cell[n].members[k]].parent=i+p;
             }}
 
@@ -614,7 +608,7 @@ std::vector<double> stepper_server::AA(int n) {
     return r;
 }
 
-hpx::future<void> stepper_server::strc3(int n){
+hpx::future<void> strc3(int n){
 
     double a1[9],b1[9],c1[9];
     std::vector<double> r; int i;
@@ -636,7 +630,7 @@ hpx::future<void> stepper_server::strc3(int n){
 
 ///////////////////////////////////////////////////////////////////
 
-void stepper_server::neighbor()
+void neighbor()
 {
     for (int i=1; i<cell.size(); ++i){
         int temp=cell[i].ID2;
@@ -657,7 +651,7 @@ void stepper_server::neighbor()
     }
 }
 
-void stepper_server::traverse_tree(int root,int node, int root2)
+void traverse_tree(int root,int node, int root2)
 {
     int i;
     float D=sqrt(pow((b[node].r1[0]-cell[root2].r2[0]),2.0)+pow((b[node].r1[1]-cell[root2].r2[1]),2.0)+pow((b[node].r1[2]-cell[root2].r2[2]),2.0));
@@ -674,14 +668,14 @@ void stepper_server::traverse_tree(int root,int node, int root2)
         cell[root].list_cell2.push_back(root2);
 }
 
-void stepper_server::cell_list(int N)
+void cell_list(int N)
 {
     for (int i = 0; i < N; ++i)
         if (cell[b[i].parent].list_cell1.size() == 0 && cell[b[i].parent].list_cell2.size() == 0)
             traverse_tree(b[i].parent, i, 0);
 }
 
-void stepper_server::create_Octree(){
+void create_Octree(){
     int N=n;
 
     initialize_body(N);
@@ -700,7 +694,7 @@ void stepper_server::create_Octree(){
     cell_list(N);
 }
 
-double* stepper_server::compute_r(int node){
+double* compute_r(int node){
 
     std::vector<float> a(3,0.0);
     int i,j,rs=-1;
@@ -724,7 +718,7 @@ double* stepper_server::compute_r(int node){
 
 }
 
-void stepper_server::insert_node(int parent, int node)
+void insert_node(int parent, int node)
 {
     cell[parent].NumNodes=cell[parent].NumNodes+1;
     cell[parent].members.push_back(node);
@@ -743,7 +737,7 @@ void stepper_server::insert_node(int parent, int node)
     }
 }
 
-void stepper_server::new_tree(int node, int parent)
+void new_tree(int node, int parent)
 {
     int k=-1;
     for(int j=0; j<2; ++j)
@@ -762,7 +756,7 @@ void stepper_server::new_tree(int node, int parent)
         new_tree(node,cell[parent].parent2);
 }
 
-std::vector<int> stepper_server::get_cell_foreach_lc(std::size_t ID,std::size_t np,std::size_t nl){
+std::vector<int> get_cell_foreach_lc(std::size_t ID,std::size_t np,std::size_t nl){
 
     std::vector<int> cell_IDs;
     int local_np=np/nl;
@@ -771,9 +765,12 @@ std::vector<int> stepper_server::get_cell_foreach_lc(std::size_t ID,std::size_t 
         if(nl!=1)
             for(int i=0; i<local_np; ++i)
                 cell_IDs.push_back(1+i+int((8/nl)*ID));
+               
         else
             for(int i=0; i<local_np; ++i) 
-                cell_IDs.push_back(ID+1+i);}
+                cell_IDs.push_back(ID+1+i);
+                
+    }
 
     if(np==64)
         for(int i=0; i<local_np; ++i)
@@ -797,13 +794,16 @@ partition stepper_server::compute_position(partition const &ce0,
                     {
                         std::size_t size = m.size();
                         partition_data next(size);
-                        for (std::size_t i = 0; i < size; ++i) {
-                            next[i]=m[i];
-                         if(m[i].ID1>0){
-                             double* p= compute_r(m[i].ID1);
-                             next[i].force[0]=p[0]; next[i].force[1]=p[1]; next[i].force[2]=p[2];
-                            std::copy(std::begin(next[i].force),std::end(next[i].force),std::begin(b[next[i].ID1].force));
-                        }}
+                      for (std::size_t i = 0; i < size; ++i) {
+                            next[i].ID1=m[i].ID1;
+                            if(next[i].ID1>=0){
+                                double* p= compute_r(next[i].ID1);
+                                next[i].force[0]=p[0]; next[i].force[1]=p[1]; next[i].force[2]=p[2];
+                                b[next[i].ID1].force[0]=next[i].force[0];
+                                b[next[i].ID1].force[1]=next[i].force[1];    
+                                b[next[i].ID1].force[2]=next[i].force[2];
+                            }
+                       }
                         return next;
                     }
             )
@@ -815,7 +815,7 @@ partition stepper_server::compute_position(partition const &ce0,
                     [ce0,Left,Right](partition_data next, partition_data const& m,
                                                         partition_data const& L, partition_data const& R) -> partition
                     {
-                      std::size_t size0=m.size();
+                        std::size_t size0=m.size();
                         int k=0; std::vector<std::size_t> size(2,0);
                         size[0] = L.size();
                         size[1] = R.size(); 
@@ -823,20 +823,12 @@ partition stepper_server::compute_position(partition const &ce0,
                         if(size[0]>0)
                             for(std::size_t i=0; i<size[0]; ++i)
                                 if(k<k_th) {
-                                    next[size0-k_th+k]=L[i]; 
-                                    if(L[i].ID1>0) {double* p1=compute_r(L[i].ID1); 
-                                        next[size0-k_th+k].force[0]=p1[0]; next[size0-k_th+k].force[1]=p1[1]; next[size0-k_th+k].force[2]=p1[2];
-                                        std::copy(std::begin(next[size0-k_th+k].force),std::end(next[size0-k_th+k].force),std::begin(b[next[size0-k_th+k].ID1].force));
-                        }k=k+1; }
+                                    next[size0-k_th+k]=L[i]; k=k+1; }
 
                         if(size[1]>0)
                             for(std::size_t i=0; i<size[1]; ++i)
                                 if(k<k_th) {
-                                    next[size0-k_th+k]=R[i]; 
-                                    if(R[i].ID1>0) {double* p1=compute_r(R[i].ID1);
-                                        next[size0-k_th+k].force[0]=p1[0]; next[size0-k_th+k].force[1]=p1[1]; next[size0-k_th+k].force[2]=p1[2];
-                                        std::copy(std::begin(next[size0-k_th+k].force),std::end(next[size0-k_th+k].force),std::begin(b[next[size0-k_th+k].ID1].force));
-                        }k=k+1; }
+                                    next[size0-k_th+k]=R[i]; k=k+1; }
 
                        for(std::size_t i=size0-k_th; i<size0; ++i)
                             if(next[i].ID1>0)
@@ -867,15 +859,16 @@ partition stepper_server::changed_members( partition const& ce0, partition const
                         partition_data next(size);
                         for (std::size_t i = 0; i < size; ++i){
                             next[i]=m[i];
+                            next[i].ID1=-1;
                             if(m[i].ID1>=0){
                                 if (dir == -1) {
                                     if (m[i].r1[dim] < cell[cell_ID].boundary[2 * dim])
-                                        next[i].ID1 = -1;
+                                        next[i].ID1 = m[i].ID1;
                                  }
 
                                 if(dir==1){
                                     if (m[i].r1[dim] > cell[cell_ID].boundary[2 * dim + 1])
-                                        next[i].ID1 = -1;
+                                        next[i].ID1 = m[i].ID1;
                                  }
                             }
                        }
@@ -954,7 +947,7 @@ partition stepper_server::Non_Members(partition const& To_N_total, partition con
                                         next[j] = l[j-i];
                             }
                         }
-                       return partition(To_N_total.get_gid(), next);
+                      return partition(To_N_total.get_gid(), next);
                     }
             ),
             std::move(next_changes),
@@ -1007,6 +1000,31 @@ partition stepper_server::New_Members(partition const& ce0, partition const& Fro
     );
 }
 
+partition stepper_server::copy_mem(partition const & ce0){
+
+        using hpx::lcos::local::dataflow; 
+        using hpx::util::unwrapped; 
+
+        hpx::shared_future<partition_data> current_bodies = ce0.get_data(partition_server::cell0);
+        hpx::future<partition_data> next_changes= current_bodies.then( 
+                unwrapped( 
+                    [ce0](partition_data const& m) -> partition_data 
+                    {
+                        std::size_t size = m.size(); 
+                        partition_data next(size);
+                        for (std::size_t i = 0; i < size; ++i)
+                            next[i]=m[i]; 
+                        return next; 
+                    }
+            )
+       );
+
+      return dataflow(hpx::launch::async,unwrapped([ce0](partition_data next)->partition
+                {
+                    return partition(ce0.get_gid(), next); 
+                } 
+            ),std::move(next_changes));
+}
 ///////////////////////////////////////////////////////////////////////////////
 
 stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
@@ -1016,7 +1034,6 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
    
     std::size_t local_np=np/nl;
     std::vector<hpx::id_type> localities = hpx::find_all_localities();
-    create_Octree();      
    
     std::cout<<std::endl;    
 
@@ -1025,23 +1042,26 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
     
     for (space& I: Parent_)
         I.resize(1);
-    
+
     std::size_t ID_lc=hpx::get_locality_id();
     hpx::id_type here = hpx::find_here();
     std::vector<int> cell_IDs=get_cell_foreach_lc(ID_lc,np,nl);
+    int s1=int(n/nl);
 
     for (std::size_t j = 0; j != local_np; ++j)
         U_[0][j]=partition(here,cell[cell_IDs[j]].members.size(),cell_IDs[j],1);    
-
-    Parent_[0][0]=partition(here,cell[1].members.size(),1,0);
+ 
+    Parent_[0][0]=partition(here,s1,1,0);
 
     send_L(0, U_[0][0]);
     send_R(0, U_[0][0]);
 
+  
     for (std::size_t time = 0; time !=nt ; ++time)
     {
         space const& current_members = U_[time % 2];
         space & next_members = U_[(time + 1) % 2]; 
+        space & n_ = U_[time % 2];
 
         space & To_L_ = U_[(time + 1) % 2]; space & To_R_ = U_[(time + 1) % 2];
         
@@ -1053,15 +1073,18 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
         From_R[0] = dataflow(hpx::launch::async, &stepper_server::New_Members, R[0], receive_R(time), ID_lc);
     
       for(std::size_t j=0; j<local_np; ++j) {
-            int i = cell_IDs[j];
+          int i = cell_IDs[j];
 
-            next_members[j] = dataflow(hpx::launch::async, &stepper_server::compute_position, current_members[j],From_L[0], From_R[0]);
+          next_members[j] = dataflow(hpx::launch::async, &stepper_server::compute_position, current_members[j],From_L[0], From_R[0]);
 
-            To_R_[j] = dataflow(hpx::launch::async, &stepper_server::changed_members, current_members[j], From_L[0], i, 1, 1);
-            To_L_[j] = dataflow(hpx::launch::async, &stepper_server::changed_members, current_members[j], From_R[0], i, 1, -1);
+          n_[j]=dataflow(hpx::launch::async, &stepper_server::copy_mem, next_members[j]);
+           
 
-            From_L[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, L[0], To_L_[j]);
-            From_R[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, R[0], To_R_[j]);
+          To_R_[j] = dataflow(hpx::launch::async, &stepper_server::changed_members, n_[j], From_L[0], i, 1, 1);
+          To_L_[j] = dataflow(hpx::launch::async, &stepper_server::changed_members, n_[j], From_R[0], i, 1, -1);
+
+          From_L[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, L[0], To_L_[j]);
+          From_R[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, R[0], To_R_[j]);
 
      }
 
@@ -1071,7 +1094,7 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
   
      }
 
-     return U_[0 % 2];
+     return U_[nt % 2];
 }
 
 HPX_REGISTER_GATHER(stepper_server::space, stepper_server_space_gatherer);
@@ -1089,6 +1112,8 @@ int hpx_main(boost::program_options::variables_map& vm)
     if(nl<9) np=8; //in level 1
 
     else if(nl>15 && nl<=64) np=64; //in level 2
+
+    create_Octree();
     
     stepper step;
     
@@ -1122,6 +1147,14 @@ int hpx_main(boost::program_options::variables_map& vm)
     {
         hpx::lcos::gather_there(gather_basename, std::move(result)).wait();
     }
+
+
+
+ 
+  if(0==hpx::get_locality_id())
+        for(int i=0; i<200; ++i)
+            std::cout<<b[i].force[0]<<"," ; 
+
 
     std::cout<<"END"<<std::endl;
     return hpx::finalize();
