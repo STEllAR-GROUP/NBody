@@ -52,6 +52,9 @@ template<typename Ar> void serialize(Ar &ar, unsigned){
         ar & b & cell;}
 //--------------------------------------------------
 
+// Use a special allocator for the partition data to remove a major contention
+// point - the constant allocation and deallocation of the data arrays.
+
 template <typename T>
 struct partition_allocator
 {
@@ -130,6 +133,7 @@ public:
             : size_(0)
     {}
 
+    // Create a new (uninitialized) partition of the given size.
     partition_data(std::size_t size)
             : data_(alloc_.allocate(size), size, buffer_type::take,
                     &partition_data::deallocate),
@@ -160,7 +164,12 @@ public:
                 data_[j].ID1=-1;
         }  
   }
-
+    
+    
+    // Create a partition which acts as a proxy to a part of the embedded array.
+    // The proxy is assumed to refer to either the left or the right boundary
+    // element
+    
     partition_data(partition_data const& base, std::size_t min_index)
             : data_(base.data_.data()+min_index, 1, buffer_type::reference,
                     hold_reference(base.data_)),      // keep referenced partition alive
@@ -176,6 +185,9 @@ public:
     std::size_t size() const { return size_; }
 
 private:
+    // Serialization support: even if all of the code below runs on one
+    // locality only, we need to provide an (empty) implementation for the
+    // serialization as all arguments passed to actions have to support this.
     std::size_t index(std::size_t idx) const
     {
         HPX_ASSERT(idx >= min_index_ && idx < size_);
@@ -282,6 +294,11 @@ inline std::size_t idx(std::size_t i, int dir, std::size_t size)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+// This is the server side representation of the data. We expose this as a HPX
+// component which allows for it to be created and accessed remotely through
+// a global address (hpx::id_type).
+
 struct partition_server
         : hpx::components::simple_component_base<partition_server>
 {
@@ -313,6 +330,11 @@ struct partition_server
         }
         return data_;
     }
+    
+    // Every member function which has to be invoked remotely needs to be
+    // wrapped into a component action. The macro below defines a new type
+    // 'get_data_action' which represents the (possibly remote) member function
+    // partition::get_data().
 
     HPX_DEFINE_COMPONENT_DIRECT_ACTION(partition_server, get_data, get_data_action);
 
@@ -320,35 +342,59 @@ private:
     partition_data data_;
 };
 
+// The macros below are necessary to generate the code required for exposing
+// our partition type remotely.
+//
+// HPX_REGISTER_COMPONENT() exposes the component creation
+// through hpx::new_<>().
+
 typedef hpx::components::simple_component<partition_server> partition_server_type;
 HPX_REGISTER_COMPONENT(partition_server_type, partition_server);
+
+// HPX_REGISTER_ACTION() exposes the component member function for remote
+// invocation.
 
 typedef partition_server::get_data_action get_data_action;
 HPX_REGISTER_ACTION(get_data_action);
 
 ///////////////////////////////////////////////////////////////////////////////
+
+// This is a client side helper class allowing to hide some of the tedious
+// boilerplate while referencing a remote partition
+
 struct partition : hpx::components::client_base<partition, partition_server>
 {
     typedef hpx::components::client_base<partition, partition_server> base_type;
 
     partition() {}
 
+     // Create new component on locality 'where' and initialize the held data
     partition(hpx::id_type where, std::size_t size,std::size_t size_mem, int cell_IDs, int flag)
             : base_type(hpx::new_<partition_server>(where,size,size_mem,cell_IDs,flag))
     {}
 
+    // Create a new component on the locality co-located to the id 'where'. The
+    // new instance will be initialized from the given partition_data.
+    
     partition(hpx::id_type where, partition_data const& data)
             : base_type(hpx::new_<partition_server>(hpx::colocated(where), data))
     {}
 
+    // Attach a future representing a (possibly remote) partition.
+    
     partition(hpx::future<hpx::id_type> && id)
             : base_type(std::move(id))
     {}
 
+    // Unwrap a future<partition> (a partition already holds a future to the
+    // id of the referenced object, thus unwrapping accesses this inner future).
+    
      partition(hpx::future<partition> && c)
             : base_type(std::move(c))
     {}
-
+    
+    // Invoke the (remote) member function which gives us access to the data.
+    // This is a pure helper function hiding the async.
      hpx::future<partition_data> get_data(partition_server::partition_type t) const
     {
         partition_server::get_data_action act;
@@ -358,6 +404,7 @@ struct partition : hpx::components::client_base<partition, partition_server>
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Data for one time step on one locality
 struct stepper_server : hpx::components::simple_component_base<stepper_server>
 {
     typedef std::vector<partition> space;
@@ -382,6 +429,8 @@ struct stepper_server : hpx::components::simple_component_base<stepper_server>
     {
     }
 
+    // do all the work on 'np' local partitions, 'nx' data points each, for
+    // 'nt' time steps
     space do_work(std::size_t np, std::size_t nl);
     HPX_DEFINE_COMPONENT_ACTION(stepper_server, do_work, do_work_action);
 
@@ -449,18 +498,29 @@ private:
     hpx::lcos::local::receive_buffer<partition> send_D_buffer_;
 };
 
+// The macros below are necessary to generate the code required for exposing
+// our partition type remotely.
+//
+// HPX_REGISTER_COMPONENT() exposes the component creation
+// through hpx::new_<>().
+
 typedef hpx::components::simple_component<stepper_server> stepper_server_type;
 HPX_REGISTER_COMPONENT(stepper_server_type, stepper_server);
 
+// HPX_REGISTER_ACTION() exposes the component member function for remote
+// invocation.
 typedef stepper_server::do_work_action do_work_action;
 HPX_REGISTER_ACTION(do_work_action);
 
 ///////////////////////////////////////////////////////////////////////////////
-
+// This is a client side member function can now be implemented as the
+// stepper_server has been defined.
 struct stepper : hpx::components::client_base<stepper, stepper_server>
 {
     typedef hpx::components::client_base<stepper, stepper_server> base_type;
-
+    
+    
+     // construct new instances/wrap existing steppers from other localities
     stepper()
             : base_type(hpx::new_<stepper_server>(hpx::find_here(), hpx::get_num_localities_sync()))
     {
@@ -1161,10 +1221,14 @@ int hpx_main(boost::program_options::variables_map& vm)
     else if(nl>15 && nl<=64) np=64; //in level 2
     stepper step;
   
+    // Measure execution time.
     boost::uint64_t t=hpx::util::high_resolution_clock::now();
 
+    // Perform all work and wait for it to finish
     hpx::future<stepper_server::space> result = step.do_work(np, nl);
   
+    
+    // Gather results from all localities
     if (0 == hpx::get_locality_id())
     {
         boost::uint64_t const num_worker_threads = hpx::get_num_worker_threads();
