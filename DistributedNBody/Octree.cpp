@@ -152,13 +152,11 @@ public:
                 }
                  
             for(std::size_t j=size_mem; j<size; ++j){
-                //data_[j]=b[1];
                 data_[j].ID1=-1;  
             }
         }
         if(flag==0)
           for(std::size_t j=0; j<size; ++j){
-                //data_[j]=b[1];
                 data_[j].ID1=-1;
         }  
   }
@@ -204,91 +202,83 @@ partition_allocator<Body> partition_data::alloc_;
 ///////////////////////////////////////////////////////////////////////////////
 inline std::size_t idx(std::size_t i, int dir, std::size_t size)
 {
-
+    
     if(dir==+1 || dir==-1)
     {
         if(i == 0 && dir == -1) return size-1;
         if(i == size-1 && dir == +1) return 0;
-
+        
         HPX_ASSERT((i + dir) < size);
         return i + dir;
     }
-
+    
     if(dir==+2 || dir==-2)
     {
         if(size==8 || size==16 || size==32){
-            if(i==0 && dir==-2) return size-1; if(i==1 && dir==-2) return size-2;
-            if(i==size-1 && dir==+2) return 0; if(i==size-2 && dir==+2) return 1;
-        }
-
+            if(dir==-2)
+                return size-(i+1);
+            if(dir==+2)
+                return size-1-i;}
+        
         if(size==64){
-            if(i==0 && dir==-2) return size-1; if(i==1 && dir==-2) return size-2;
-            if(i==2 && dir==-2) return size-3; if(i==3 && dir==-2) return size-4;
-            if(i==size-1 && dir==+2) return 0; if(i==size-2 && dir==+2) return 1;
-            if(i==size-3 && dir==+2) return 2; if(i==size-4 && dir==+2) return 3;            
-        }
+            if(i==-2 && i<4)
+                return size-(i+1);
+            if(i==+2 && i<size && i>size-5)
+                return size-1-i;}
+        
         int temp;
         if(size==8 || size==16 || size==32) temp=i+dir;
         if(size==64) temp=i+(2*dir);
         if(size<8) temp=i;
         HPX_ASSERT(temp < size);
-        return temp;    
-    }   
+        return temp;
+    }
     
     if(dir==+4 || dir==-4){
-       
+        
         if(size==4){
-            if(i==0 && dir==-4) return size-1; if(i==1 && dir==-4) return size-2;
-            if(i==size-1 && dir==+4) return 0; if(i==size-2 && dir==+4) return 1;
-        } 
-
+            if(dir==-4 && i<2)
+                return size-(i+1);
+            if(dir==+4 && i<size && i>size-3)
+                return size-1-i;}
+        
+        
         if(size==8){
-            if(i==0 && dir==-4) return size-1; if(i==1 && dir==-4) return size-2;
-            if(i==2 && dir==-4) return size-3; if(i==3 && dir==-4) return size-4;
-            if(i==size-1 && dir==+4) return 0; if(i==size-2 && dir==+4) return 1;
-            if(i==size-3 && dir==+4) return 2; if(i==size-4 && dir==+4) return 3;
-        }
-
+            if(dir==-4 && i<4)
+                return size-(i+1);
+            
+            if(dir==+4 && i<size && i>size-5)
+                return size-1-i;}
+        
+        
         if(size==16 || size==32){
-            if(i==0 && dir==-4) return size-1; if(i==1 && dir==-4) return size-2;
-            if(i==2 && dir==-4) return size-3; if(i==3 && dir==-4) return size-4; 
-            if(i==4 && dir==-4) return size-5; if(i==5 && dir==-4) return size-6; 
-            if(i==6 && dir==-4) return size-7; if(i==7 && dir==-4) return size-8; 
-            if(i==size-1 && dir==+4) return 0; if(i==size-2 && dir==+4) return 1;
-            if(i==size-3 && dir==+4) return 2; if(i==size-4 && dir==+4) return 3; 
-            if(i==size-5 && dir==+4) return 4; if(i==size-6 && dir==+4) return 5; 
-            if(i==size-7 && dir==+4) return 6; if(i==size-8 && dir==+4) return 7;}
+            if(dir==-4 && i<8 && i>=0)
+                return size-(i+1);
+            
+            if(dir==+4 && i<size && i>size-9)
+                return size-1-i;}
+        
+        
         
         if(size==64){
-            if(i==0 && dir==-4) return size-1; if(i==1 && dir==-4) return size-2;
-            if(i==2 && dir==-4) return size-3; if(i==3 && dir==-4) return size-4;
-            if(i==4 && dir==-4) return size-5; if(i==5 && dir==-4) return size-6;
-            if(i==6 && dir==-4) return size-7; if(i==7 && dir==-4) return size-8;
-            if(i==8 && dir==-4) return size-9; if(i==9 && dir==-4) return size-10;
-            if(i==10 && dir==-4) return size-11; if(i==11 && dir==-4) return size-12;
-            if(i==12 && dir==-4) return size-13; if(i==13 && dir==-4) return size-14;
-            if(i==14 && dir==-4) return size-15; if(i==15 && dir==-4) return size-16;
-            if(i==size-1 && dir==+4) return 0; if(i==size-2 && dir==+4) return 1;
-            if(i==size-3 && dir==+4) return 2; if(i==size-4 && dir==+4) return 3;
-            if(i==size-5 && dir==+4) return 4; if(i==size-6 && dir==+4) return 5;
-            if(i==size-7 && dir==+4) return 6; if(i==size-8 && dir==+4) return 7;
-            if(i==size-9 && dir==+4) return 8; if(i==size-10 && dir==+4) return 9;
-            if(i==size-11 && dir==+4) return 10; if(i==size-12 && dir==+4) return 11;
-            if(i==size-13 && dir==+4) return 12; if(i==size-14 && dir==+4) return 13;
-            if(i==size-15 && dir==+4) return 14; if(i==size-16 && dir==+4) return 15;
-        }
-
+            if(dir==-4 && i<16)
+                return size-(i+1);
+            
+            if(dir==+4 && i<size && i>size-17)
+                return size-1-i;}
+        
+        
         int temp;
         if(size==4) temp=i+int(dir*0.5);
         if(size==8) temp=i+dir;
         if(size==16 || size==32) temp=i+(dir*2);
         if(size==64) temp=i+(dir*4);
         if(size<4) temp=i;
-           
-        HPX_ASSERT(temp < size);  
-        return temp;
-     }
         
+        HPX_ASSERT(temp < size);
+        return temp;
+    }
+    
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -855,11 +845,11 @@ partition stepper_server::compute_position(partition const &ce0,
                             for(std::size_t i=0; i<size[5]; ++i)
                                 if(k<k_th) {
                                     next[size0-k_th+k]=D[i]; k=k+1;}
-/*
+
                        for(std::size_t i=size0-k_th; i<size0; ++i)
                             if(next[i].ID1>0)
                                 new_tree(next[i].ID1,next[i].parent);
-*/
+
                         return partition(ce0.get_gid(), next);
                     }
             ),
@@ -1137,7 +1127,7 @@ stepper_server::space stepper_server::do_work(std::size_t np, std::size_t nl)
             From_L[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, L[0], To_L_[j]);
             From_R[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, R[0], To_R_[j]);
             From_U[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, U[0], To_U_[j]);
-            From_D[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, D[0], To_D_[j]);*/
+            From_D[0] = dataflow(hpx::launch::async, &stepper_server::Non_Members, D[0], To_D_[j]);
   
      }
 
